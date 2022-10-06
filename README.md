@@ -1,4 +1,4 @@
-# nestdaq
+# NestDAQ
 A streaming DAQ implementation for the particle measurements
 
 
@@ -7,14 +7,14 @@ A streaming DAQ implementation for the particle measurements
 | ---    | ---     | ---                      | ---                            | 
 | CentOS | 7       | GCC 8.3.1 (devtoolset-8) | 3.14.6 or later (epel: cmake3) |
 
-## External packages used with E16DAQ Controller
+## External packages used with NestDAQ
 | Packages         | Version  | URL |
 | ---              | ---      | --- |
 | Redis            | 6.0.10   | https://github.com/redis/redis/ |
 | Redis TimeSeries | 1.4.18   | https://github.com/RedisTimeSeries/RedisTimeSeries/ |
 | Grafana          |          | | 
 
-## Dependencies to build E16DAQ Controller
+## Dependencies to build NestDAQ
 
 | Packages         | Version                      | URL |
 | ---              | ---                          | --- |
