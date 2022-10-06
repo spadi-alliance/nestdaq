@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>DAQ Controller</title>
+  </head>
+
+  <body>
+    <h1>DAQ controller</h1>    
+
+    <h2>RUN number</h2>
+    <p>
+      <form onsubmit="return SubmitMessage('run_number')">
+        New value:
+        <input type="text" id="run_number">
+        <input type="submit" value="Send">
+        <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis">
+        <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box">
+      </form>
+      <div id="latest_run_number"></div>
+   </p>
+   
+    
+    <h2>State transition command</h2>
+
+    <h3>Idle &RightTriangle; Running</h3>
+    <p>
+      Idle &RightTriangle; 
+      <!-- 
+      <input type="button" onclick="redis_publish('INIT DEVICE')"   value="Init Device" data-toggle="tool=tip" title="changes state from Idle to Initialized"> 
+      &RightTriangle; Initializing Device &RightTriangle; Initialized &RightTriangle; 
+      <input type="button" onclick="redis_publish('BIND')"          value="Bind" data-toggle="tool-tip" title="changes state from Idle/Initialized to Bound"> 
+      &RightTriangle; Binding &RightTriangle; Bound &RightTriangle; 
+      <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Socket" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
+      &RightTriangle; Connecting &RightTriangle; Device Ready &RightTriangle;
+      -->
+      <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Connection" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
+      Device Ready &RightTriangle;
+      <input type="button" onclick="redis_publish('INIT TASK')"     value="Init Task" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound/DeviceReady to Ready"> 
+      &RightTriangle; <!-- Initializing Task &RightTriangle; --> Ready &RightTriangle;
+      <input type="button" onclick="redis_publish('RUN')"           value="Run" data-toggle="tool-tip" title="changes any state to Running"> 
+      &RightTriangle; Running
+    </p>
+    <h3>Idle &LeftTriangle; Running</h3>
+    <!--
+    <p>
+      Device Ready &LeftTriangle; Resetting Task &LeftTriangle;
+      <input type="button" onclick="redis_publish('RESET TASK')"   value="Reset Task" data-toggle="tool-tip" title="changes state from Running/Ready to DeviceReady"> 
+      &LeftTriangle; Ready &LeftTriangle;
+      <input type="button" onclick="redis_publish('STOP')"         value="Stop" data-toggle="tool=tip" title="changes state from Running to Ready"> 
+      &LeftTriangle; Running
+    </p>
+    <p>
+      Idle &LeftTriangle; Resetting Device &LeftTriangle;
+      <input type="button" onclick="redis_publish('RESET DEVICE')" value="Reset Device" data-toggle="tool-tip" title="changes any state to Idle"> 
+      &LeftTriangle; Initialized / Bound / DeviceReady
+    </p>
+    -->
+    <p>
+      Idle &LeftTriangle; <!-- Resetting Device &LeftTriangle; -->
+      <input type="button" onclick="redis_publish('RESET DEVICE')" value="Reset Device" data-toggle="tool-tip" title="changes any state to Idle"> 
+      &LeftTriangle; Device Ready &LeftTriangle; <!-- Resetting Task &LeftTriangle; -->
+      <input type="button" onclick="redis_publish('RESET TASK')"   value="Reset Task" data-toggle="tool-tip" title="changes state from Running/Ready to DeviceReady"> 
+      &LeftTriangle; Ready &LeftTriangle;
+      <input type="button" onclick="redis_publish('STOP')"         value="Stop" data-toggle="tool=tip" title="changes state from Running to Ready"> 
+      &LeftTriangle; Running
+    </p>
+    <h3>&RightTriangle; Exit</h3>
+    <p>
+      Any state &RightTriangle;
+      <input type="button" onclick="redis_publish('END')" value="End" data-toggle="tool-tip" title="changes any state to Exiting"> 
+      &RightTriangle; Exiting
+    </p>
+    
+    <h2>State Summary</h2>
+      <input type="button" onclick="redis_publish('get_state')" value="Get" data-toggle="tool-tip" title="Get instance list and state via redis-pubsub">
+      <input type="button" onclick="ResetStateList()" value="Reset" data-toggle="tool-tip" title="Reset instance list and state (for shrinking list)">
+    <p id="State Summary"></p>
+    <p id="Instance State"></p>
+
+    <h2>Select command target</h2>
+    <p id="commandTarget"> 
+      <select  id="commandTargetServiceSelect"  onChange="SendSelectedResult('commandTargetServiceSelect')"  multiple size=10></select>
+      <select  id="commandTargetInstanceSelect" onChange="SendSelectedResult('commandTargetInstanceSelect')" multiple size=10></select>
+    </p>
+   
+    
+    <p id="myWebSocketConnectionId"></p>
+    <p id="websocketConnectedIdList"></p>
+    <h2>Messages</h2>
+    <div id="main"></div>
+    <!--
+      <p>
+      <button onclick="SendMessage('{ "command": "halt" }')" data-toggle="tool-tip" title="Shuttdown DAQ controller server">Halt</button> 
+    </p>
+    -->
+  </body>
+
+  
+  <!-- ==================================================================== -->
+  <script type='text/javascript'>
+
+    // ==================================================
+    // -------------- table --------------------
+    const instStateTable    = CreateInstanceStateTable();
+    const stateSummaryTable = CreateStateSummaryTable();
+    const stateList    = new Array();
+    const stateSummary = new Array();
+
+    // --------------- websocket ---------------
+    let path = window.location.href;
+    path = path.replace("http://", "ws://");
+    path = path.replace(".html", "");
+    console.log('starting socket ' + path);
+
+    const socket = new WebSocket(path);
+
+
+    socket.onopen = function() {
+       console.log('websocket initialized');
+       this._ready = true;
+       redis_publish('get_state');
+    }
+
+    socket.onmessage = function(e) {
+       const msg = e.data;
+       if (typeof msg != 'string') {
+         const s = "unsupported message kind: " + (typeof msg);
+         console.log(s);
+         alert(s);
+         return 
+       } else {
+         if (msg.startsWith('error:')) {
+           alert(msg);
+         } else if (msg.startsWith('My WebSocket Connection ID:')) {
+           AddMyWebSocketConnectionId(msg);
+         } else if (msg.startsWith('WebSocket Connected ID:')) {
+           UpdateWebSocketConnectedIdList(msg);
+         } else {
+           const obj = JSON.parse(msg);
+           //console.log(obj.type);
+
+           if (obj.type=='error') {
+            alert(obj.value);
+           } else if (obj.type=='set run_number') {
+            SetRunNumber(obj.value);
+           } else if (obj.type=='set latest_run_number') {
+            SetLatestRunNumber(obj.value); 
+           } else if (obj.type=='state-summary') {
+            UpdateStateSummary(obj);
+            //SendSelectedResult('commandTargetServiceSelect');
+           } else if (obj.type=='instance-state') {
+            UpdateInstanceState(obj);
+            //SendSelectedResult('commandTargetInstanceSelect');
+           } else if (obj.type=='selected services') {
+            UpdateTargetServices(obj);
+           } else if (obj.type=='selected instances') {
+            UpdateTargetInstances(obj);
+           }
+          
+           //AddOutput("txt: " + msg);
+         }
+       } 
+
+       //console.log('get: ' + msg);
+    }
+
+    socket.onclose = function() {
+       console.log('websocket closed');
+       window.close();
+       this._ready = false;
+    }
+
+    socket.onerror = function (err) {
+       this._ready = false;
+       console.log('websocket error' + err);
+    }
+
+    // ==================================================
+    // --------------------------------------------------
+    function AddOutput(arg) {
+       document.getElementById("main").innerHTML += arg + "<br>";
+    }
+
+    // --------------------------------------------------
+    function AddMyWebSocketConnectionId(arg) {
+      document.getElementById("myWebSocketConnectionId").innerHTML = arg + "<br>";
+    }
+    
+    // --------------------------------------------------
+    function CreateInstanceStateTable() {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      document.getElementById('Instance State').appendChild(table);
+      table.setAttribute("border", "1");
+      table.setAttribute("style", "border-collapse: collapse");
+      
+      // table header
+      const hrow                       = document.createElement('tr');
+
+      const hcol_service_name          = document.createElement('th'); 
+      const hcol_instance_name         = document.createElement('th'); 
+      const hcol_state                 = document.createElement('th'); 
+      const hcol_last_update           = document.createElement('th');
+
+      hcol_service_name       .innerHTML = "Service";
+      hcol_instance_name      .innerHTML = "Instance";
+      hcol_state              .innerHTML = "state";
+      hcol_last_update        .innerHTML = "last-update";
+
+      hrow.appendChild(hcol_service_name       );
+      hrow.appendChild(hcol_instance_name      );
+      hrow.appendChild(hcol_state              );
+      hrow.appendChild(hcol_last_update        ); 
+      thead.appendChild(hrow);
+
+      return table;
+    }
+
+    // --------------------------------------------------
+    function CreateStateSummaryTable() {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      document.getElementById('State Summary').appendChild(table);
+      table.setAttribute("border", "1");
+      table.setAttribute("style", "border-collapse: collapse");
+
+      // table header
+      const hrow                       = document.createElement('tr');
+
+      const hcol_name                  = document.createElement('th'); 
+      const hcol_n_instances           = document.createElement('th');
+      const hcol_undefined             = document.createElement('th');
+      const hcol_ok                    = document.createElement('th');
+      const hcol_error                 = document.createElement('th');
+      const hcol_idle                  = document.createElement('th');
+      const hcol_initializing_device   = document.createElement('th');
+      const hcol_initialized           = document.createElement('th');
+      const hcol_binding               = document.createElement('th');
+      const hcol_bound                 = document.createElement('th');
+      const hcol_connecting            = document.createElement('th');
+      const hcol_device_ready          = document.createElement('th');
+      const hcol_initializing_task     = document.createElement('th');
+      const hcol_ready                 = document.createElement('th');
+      const hcol_running               = document.createElement('th');
+      const hcol_resetting_task        = document.createElement('th');
+      const hcol_resetting_device      = document.createElement('th');
+      const hcol_exiting               = document.createElement('th');
+      const hcol_last_update           = document.createElement('th');
+
+      hcol_name               .innerHTML = "Service";
+      hcol_n_instances        .innerHTML = "N"; 
+      hcol_undefined          .innerHTML = "Undefined";
+      hcol_ok                 .innerHTML = "Ok";
+      hcol_error              .innerHTML = "Error";
+      hcol_idle               .innerHTML = "Idle"; 
+      hcol_initializing_device.innerHTML = "Init-Device"; //"InitializingDevice"; 
+      hcol_initialized        .innerHTML = "Initialized"; 
+      hcol_binding            .innerHTML = "Binding"; 
+      hcol_bound              .innerHTML = "Bound"; 
+      hcol_connecting         .innerHTML = "Connecting"; 
+      hcol_device_ready       .innerHTML = "Device-Ready"; 
+      hcol_initializing_task  .innerHTML = "Init-Task"; //"InitializingTask"; 
+      hcol_ready              .innerHTML = "Ready"; 
+      hcol_running            .innerHTML = "Running"; 
+      hcol_resetting_task     .innerHTML = "Reset-Task"; //"ResettingTask"; 
+      hcol_resetting_device   .innerHTML = "Reset-Device"; //"ResettingDevice"; 
+      hcol_exiting            .innerHTML = "Exiting"; 
+      hcol_last_update        .innerHTML = "last-update";
+
+      hrow.appendChild(hcol_name               );
+      hrow.appendChild(hcol_n_instances        );
+      hrow.appendChild(hcol_undefined          );
+      hrow.appendChild(hcol_ok                 );
+      hrow.appendChild(hcol_error              ); 
+      hrow.appendChild(hcol_idle               ); 
+      hrow.appendChild(hcol_initializing_device); 
+      hrow.appendChild(hcol_initialized        ); 
+      hrow.appendChild(hcol_binding            ); 
+      hrow.appendChild(hcol_bound              ); 
+      hrow.appendChild(hcol_connecting         ); 
+      hrow.appendChild(hcol_device_ready       ); 
+      hrow.appendChild(hcol_initializing_task  ); 
+      hrow.appendChild(hcol_ready              ); 
+      hrow.appendChild(hcol_running            ); 
+      hrow.appendChild(hcol_resetting_task     ); 
+      hrow.appendChild(hcol_resetting_device   ); 
+      hrow.appendChild(hcol_exiting            ); 
+      hrow.appendChild(hcol_last_update        ); 
+      thead.appendChild(hrow);
+
+      return table;
+    }
+    
+    // --------------------------------------------------
+    function redis_get(arg) {
+      SendMessage('{ "command": "redis-get", "value": "' + arg + '" }');
+    }
+
+    // --------------------------------------------------
+    function redis_incr(arg) {
+      SendMessage('{ "command": "redis-incr", "value": "' + arg + '" }');
+    }
+    
+    // --------------------------------------------------
+    function redis_publish(arg) {
+      SendMessage('{ "command": "redis-publish", "value": "' + arg + '" }');
+    }
+
+
+    // --------------------------------------------------
+    function ResetStateList() {
+      SendMessage('{ "command": "resetStateList" }');
+      redis_publish('get_state');
+    }
+
+    // --------------------------------------------------
+    function SendMessage(arg) {
+      console.log(this.constructor.name + ': arg = ' + arg);
+       if (socket) {
+          socket.send(arg);
+       }
+    }
+    // --------------------------------------------------
+    function SendSelectedResult(arg) {
+      //console.log(this.constructor.name + ': arg = ' + arg);
+      const sel  = document.getElementById(arg); 
+      const arr = [];
+      for (let i=0; i< sel.length; i++) {
+        if (sel[i].selected) {
+          arr.push(sel[i].text);
+        }
+      }
+      const msg = { command: arg };
+      msg["items"] = arr;
+      const s = JSON.stringify(msg);
+      //console.log(this.constructor.name + ': selected = ' + arr);
+      //console.log('SendSelectedResult: ' + s);
+      SendMessage(s);
+    }
+
+    // --------------------------------------------------
+    function SetLatestRunNumber(arg) {
+      console.log('SetLatestRunNumber: ', arg);
+      document.getElementById("latest_run_number").innerHTML = 'Latest : ' + arg;
+    }
+
+    // --------------------------------------------------
+    function SetRunNumber(arg) {
+      console.log('SetRunNumber: ', arg);
+      document.getElementById("run_number").value = arg; 
+    }
+
+    // --------------------------------------------------
+    function SubmitMessage(arg) {
+      //console.log(this.constructor.name + ': arg = ' + arg);
+      const val = document.getElementById(arg).value;
+      const num = Number(val);
+      //console.log('num = ' + num + ', is integer = ', + Number.isInteger(num) + ", sign = " + Math.sign(num));
+      if (!Number.isInteger(num)) {
+        alert('invalid run number = '+ val + ' (value is' + num + ')');
+        return false;
+      }
+      //if (Math.sign(num)<0) {
+      //  alert('invalid run number = '+num +' (value is negative)');
+      //  return false;
+      //}
+      SendMessage('{ "command": "redis-set", "name": "' + arg + '", "value": "' + document.getElementById(arg).value + '" }');
+      return false;
+    }
+    
+    // --------------------------------------------------
+    function UpdateInstanceState(arg) {
+      // -- -- -- -- -- -- -- -- 
+      // update object list
+      // -- -- -- -- -- -- -- -- 
+      const long_name = arg.service + ':' + arg.instance;
+      const index = stateList.findIndex((e) => (e.long_name === long_name));
+      //console.log('UpdateInstanceState: index = ' + index + ' ' + long_name);
+      if (index < 0) {
+        const obj = { long_name: long_name, service: arg.service, instance: arg.instance, state: arg.state, date: arg.date };
+        stateList.push(obj);
+        //const new_row = instStateTable.insertRow(-1);
+        //for (let i=0; i<4; ++i) {
+        //  new_row.insertCell(-1);
+        //}
+      } else {
+        const obj = stateList[index];
+        obj.state = arg.state;
+        obj.date  = arg.date;
+      }
+
+      // sort list by long_name
+      stateList.sort(function (a, b) {
+        if (a.long_name > b.long_name) { 
+          return 1;
+        } else {
+          return -1;
+        }
+      });
+      // -- -- -- -- -- -- -- -- 
+      // update HTML table contents
+      // -- -- -- -- -- -- -- -- 
+      //for (let i=0; i<stateList.length; ++i) {
+      //  const obj = stateList[i];
+      //  const row = instStateTable.rows[i+1]; // rows[0] == thead 
+      //  const c = row.cells;
+      //  c[0].innerHTML = obj.service;
+      //  c[1].innerHTML = obj.instance; // short name
+      //  c[2].innerHTML = obj.state;
+      //  c[3].innerHTML = obj.date;
+      //}
+
+      const v = new Array(); 
+      for (let i=0; i<stateList.length; ++i) {
+        v.push({ name: stateList[i].service + ':' + stateList[i].instance });
+      }
+      const o = { instances: v };
+      UpdateTargetInstances(o);
+    }
+
+    // --------------------------------------------------
+    function UpdateStateSummary(arg) {
+
+      // -- -- -- -- -- -- -- -- --
+      // update object list
+      // -- -- -- -- -- -- -- -- --
+      const index = stateSummary.findIndex((e) => (e.service === arg.service));
+      //console.log('UpdateStateSummary: index = ' + index + ' ' + arg.service);
+      if (index < 0) {
+        const obj = { service: arg.service, date: arg.date, n_instances: arg.n_instances, counts: arg.counts };
+        stateSummary.push(obj);
+        const new_row = stateSummaryTable.insertRow(-1);
+        for (let i=0; i<(obj.counts.length+3); i++) {
+          new_row.insertCell(-1);
+        }
+      } else {
+        const obj       = stateSummary[index];
+        obj.date        = arg.date;
+        obj.n_instances = arg.n_instances;
+        obj.counts      = arg.counts;
+      }
+
+      // sort list by service name
+      stateSummary.sort(function (a, b) {
+        if (a.service > b.service) {
+          return 1;
+        } else {
+          return -1;
+        }
+      });
+
+      // -- -- -- -- -- -- -- -- --
+      // update table contents
+      // -- -- -- -- -- -- -- -- --
+      for (let i=0; i<stateSummary.length; ++i) {
+        const obj = stateSummary[i];
+        const row = stateSummaryTable.rows[i+1]; // rows[0] == thead
+        const c = row.cells;
+        c[0].innerHTML = obj.service;
+        c[1].innerHTML = obj.n_instances;
+        for (let j=0; j<obj.counts.length; ++j) {
+          const val = obj.counts[j].value;
+          c[j+2].innerHTML = (val!=0) ? val : '';
+        }
+        c[obj.counts.length+2].innerHTML = obj.date;
+      }
+
+      const v = new Array(); 
+      for (let i=0; i<stateSummary.length; ++i) {
+        v.push({ name: stateSummary[i].service });
+      }
+      const o = { services: v };
+      UpdateTargetServices(o);
+    }
+
+    // --------------------------------------------------
+    function UpdateTargetInstances(arg) {
+      // -- -- -- -- -- -- -- -- 
+      // update HTML selection list
+      // -- -- -- -- -- -- -- -- 
+      // clear selection list
+      const sel = document.getElementById("commandTargetInstanceSelect");
+      while (sel.lastChild) {
+        sel.removeChild(sel.lastChild);
+      }
+
+      // dummy option (disabled) for indicating "Choose Instances" 
+      let dummy = document.createElement("option");
+      dummy.text="Choose Instances";
+      dummy.disabled = true;
+      sel.appendChild(dummy);
+      
+      // default selected option with name of "all"
+      dummy = document.createElement("option");
+      dummy.text="all";
+      dummy.selected = true;
+      sel.appendChild(dummy);
+      
+      const v = arg.instances;
+      for (let i=0; i<v.length; i++) {
+        const option = document.createElement("option");
+        option.text = v[i].name;
+        option.value = i;
+        sel.appendChild(option);
+      } 
+    }
+
+    // --------------------------------------------------
+    function UpdateTargetServices(arg) {
+      // -- -- -- -- -- -- -- -- --
+      // update selection list
+      // -- -- -- -- -- -- -- -- --
+      // clear selection list
+      const sel = document.getElementById("commandTargetServiceSelect");
+      while (sel.lastChild) {
+        sel.removeChild(sel.lastChild);
+      }
+      // dummy option (disabled) for indicating "Choose Services" 
+      let dummy = document.createElement("option");
+      dummy.text="Choose Services";
+      dummy.disabled = true;
+      sel.appendChild(dummy);
+      // default selected option with name of "all"
+      dummy = document.createElement("option");
+      dummy.text="all";
+      dummy.selected = true;
+      sel.appendChild(dummy);
+      // update target list
+      const v = arg.services;
+      for (let i=0; i<v.length; ++i) {
+        const option = document.createElement("option");
+        option.text = v[i].name;
+        option.value = i;
+        sel.appendChild(option);
+      }
+    }
+
+    // --------------------------------------------------
+    function UpdateWebSocketConnectedIdList(arg) {
+      document.getElementById("websocketConnectedIdList").innerHTML = arg + "<br>";
+    }
+
+  </script>
+
+</html>

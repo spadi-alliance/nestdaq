@@ -1,0 +1,8 @@
+#ifndef WebGui_DefaultHtmlFilePath_h
+#define WebGui_DefaultHtmlFilePath_h
+
+#include <string_view>
+
+static constexpr std::string_view DefaultDocRootPath{"@EX_DATADIR@/examples/controller"};
+
+#endif
