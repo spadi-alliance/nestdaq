@@ -175,7 +175,7 @@
 
 (build exmaple for redis-plus-plus)
 ```bash
-  git clone https://github.com/sewenew/redis-plus-lus.git
+  git clone https://github.com/sewenew/redis-plus-plus.git
   cd redis-plus-plus
 
   # to use RedLock (distributed lock algorithm), checkout "recipes" branch
