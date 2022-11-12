@@ -13,6 +13,8 @@
 #include <fairmq/FairMQLogger.h>
 
 #include <sw/redis++/redis++.h>
+#include <sw/redis++/patterns/redlock.h>
+#include <sw/redis++/errors.h>
 
 #include "plugins/Constants.h"
 #include "plugins/Functions.h"
@@ -473,52 +475,59 @@ bool daq::service::MetricsPlugin::CreateTimeseries(std::string_view key,
 //_____________________________________________________________________________
 void daq::service::MetricsPlugin::DeleteExpiredFields()
 {
-  // RedLock transaction version
-  sw::redis::RedMutex mtx(*fClient, "metrics");
-  sw::redis::RedLock<sw::redis::RedMutex> redLock(mtx, std::defer_lock);
   while (true) {
-    if (redLock.try_lock(std::chrono::milliseconds(30000))) {
-      LOG(debug) << "got lock: " << MyClass << " " << fId;
+    try {
+      sw::redis::RedMutex mtx(fClient, "metrics");
+      std::unique_lock<sw::redis::RedMutex> redLock(mtx, std::defer_lock);
+      if (redLock.try_lock()) {
+        LOG(debug) << "got lock: " << MyClass << " " << fId;
 
-      std::unordered_map<std::string, std::string> hashInstanceToLastUpdateNS;
-      fClient->hgetall(fLastUpdateNSKey, std::inserter(hashInstanceToLastUpdateNS, hashInstanceToLastUpdateNS.begin()));
-      std::vector<std::string> expiredInstances;
-      for (const auto& [k, v] : hashInstanceToLastUpdateNS) {
-        auto tNS = std::stoull(v); // nanoseconds -> milliseconds
-        auto tNow = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        if ((tNow - tNS)/1e6 > fMaxTtl) {
-          expiredInstances.push_back(k);
+        std::unordered_map<std::string, std::string> hashInstanceToLastUpdateNS;
+        fClient->hgetall(fLastUpdateNSKey, std::inserter(hashInstanceToLastUpdateNS, hashInstanceToLastUpdateNS.begin()));
+        std::vector<std::string> expiredInstances;
+        for (const auto& [k, v] : hashInstanceToLastUpdateNS) {
+          auto tNS = std::stoull(v); // nanoseconds -> milliseconds
+          auto tNow = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+          if ((tNow - tNS)/1e6 > fMaxTtl) {
+            expiredInstances.push_back(k);
+          }
         }
-      }
 
-      if (!expiredInstances.empty()) {
-        for (const auto &k : fRegisteredKeys) {
-          LOG(debug) << __func__ << ":" << __LINE__ << " delete " << k;
-          fPipe->hdel(k, expiredInstances.begin(), expiredInstances.end());
-        }
-      
-        std::unordered_map<std::string, std::string> sockets;
-        for (const auto &k : fRegisteredSockKeys) {
-          fClient->hgetall(k, std::inserter(sockets, sockets.begin()));
-          std::vector<std::string> a;
-          for (const auto &instName : expiredInstances) {
-            for (const auto &[sockName, v] : sockets) {
-              if (sockName.find(instName) == 0) {
-                LOG(debug) << __func__ << ":" << __LINE__ << " delete " << k << " " << sockName;
-                fPipe->hdel(k, sockName);
+        if (!expiredInstances.empty()) {
+          for (const auto &k : fRegisteredKeys) {
+            LOG(debug) << __func__ << ":" << __LINE__ << " delete " << k;
+            fPipe->hdel(k, expiredInstances.begin(), expiredInstances.end());
+          }
+
+          std::unordered_map<std::string, std::string> sockets;
+          for (const auto &k : fRegisteredSockKeys) {
+            fClient->hgetall(k, std::inserter(sockets, sockets.begin()));
+            std::vector<std::string> a;
+            for (const auto &instName : expiredInstances) {
+              for (const auto &[sockName, v] : sockets) {
+                if (sockName.find(instName) == 0) {
+                  LOG(debug) << __func__ << ":" << __LINE__ << " delete " << k << " " << sockName;
+                  fPipe->hdel(k, sockName);
+                }
               }
             }
           }
         }
+        fPipe->exec();
+        if (redLock.owns_lock()) {
+          LOG(debug) << "unlock: " << MyClass << " " << fId;
+          break;
+        } else {
+          std::this_thread::yield();
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
       }
-      fPipe->exec();
-      if (redLock.owns_lock()) {
-        LOG(debug) << "unlock: " << MyClass << " " << fId;
-        break;
-      } else {
-        std::this_thread::yield();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
+    } catch (const sw::redis::Error& e) {
+      LOG(error) << " caught exception (redis++) : " << e.what(); 
+    } catch (const std::exception& e) {
+      LOG(error) << " caught exception (std) : " << e.what(); 
+    } catch (...) {
+      LOG(error) << " caught exception : unknown"; 
     }
   }
 }

@@ -11,6 +11,7 @@
 #include <sw/redis++/redis++.h>
 
 #include <fairmq/States.h>
+#include <fairmq/FairMQLogger.h>
 
 #include "plugins/Constants.h"
 #include "plugins/tools.h"
@@ -208,6 +209,7 @@ void WebGui::InitializeFunctionList()
 //_____________________________________________________________________________
 void WebGui::MakeTargetList(unsigned int connid)
 {
+  LOG(debug) << "make target list";
   //std::cout << __func__ << std::endl; 
   decltype(fDeviceState) devStateList;
   {
@@ -456,8 +458,9 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
     CopyLatestRunNumber(connid);
   }
   if (knownCommandList.count(v)>0) {
+    LOG(debug) << " connid = " << connid;
 
-    if (fCommandTargetService[connid]["all"]) {
+    if (fCommandTargetService[connid].count("all")>0) {
       boost::property_tree::ptree cmd; 
       cmd.put("command", "change_state");
       cmd.put("value", v);
@@ -465,6 +468,7 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
       cmd.put("instance", "all");
       const auto& command = to_string(cmd);
       //std::cout << __func__ << " command = " << command << std::endl;
+      LOG(debug) << " 1: command =  " << command;
       fClient->publish(fChannelName, command);
       return;
     }
@@ -483,16 +487,20 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
         const auto& command = to_string(cmd);
 
         //std::cout << __func__ << " command = " << command << std::endl;
+        LOG(debug) << " 2: command =  " << command;
         fClient->publish(fChannelName, command);
         if (!isServiceSelected) {
           isServiceSelected = true;
         }
       }
     }
+
     if (isServiceSelected) {
+      LOG(debug) << " service selected";
       return;
     }
-
+    LOG(debug) << " service not selected";
+    
     for (const auto& [longName, selected] : fCommandTargetInstance[connid]) {
       if (selected) {
         const auto& pos = longName.find(fSeparator);
@@ -505,6 +513,7 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
         cmd.put("instance", shortName);
         const auto& command = to_string(cmd);
         //std::cout << __func__ << " command = " << command << std::endl;
+        LOG(debug) << " 3: command = " << command;
         fClient->publish(fChannelName, command);
       }
     }

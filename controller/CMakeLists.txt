@@ -31,6 +31,7 @@ add_executable(${EXEC}
 
 target_include_directories(${EXEC} PUBLIC
   ${Boost_INCLUDE_DIRS};
+  ${FairLogger_INCDIR};
   ${FairMQ_INCDIR};
   ${HIREDIS_HEADER};
   ${REDIS_PLUS_PLUS_HEADER};
@@ -40,12 +41,15 @@ target_include_directories(${EXEC} PUBLIC
 
 target_link_directories(${EXEC} PUBLIC
   ${Boost_LIBRARY_DIRS};
+  ${FairLogger_LIBDIR};
   ${FairMQ_LIBDIR};
 )
 
 target_link_libraries(${EXEC} PUBLIC
   ${Boost_LIBRARIES};
   FairMQStateMachine;
+  FairLogger;
+  ${fmt_LIB};
   ${HIREDIS_LIB};
   ${REDIS_PLUS_PLUS_LIB};
   ${CMAKE_THREAD_LIBS_INIT};

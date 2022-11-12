@@ -14,6 +14,8 @@
 #include <boost/property_tree/json_parser.hpp>
 
 #include <sw/redis++/redis++.h>
+#include <sw/redis++/patterns/redlock.h>
+#include <sw/redis++/errors.h>
 
 #include <fairmq/Tools.h> 
 
@@ -865,65 +867,72 @@ void Plugin::SetId()
    fId = GetProperty<std::string>("id");
   }
   if (fId.empty() && !fServiceName.empty()) {
-    // RedLock transaction version 
-    sw::redis::RedMutex mtx(*fClient, "resource");   
-    sw::redis::RedLock<sw::redis::RedMutex> redLock(mtx, std::defer_lock);
     while (true) {
-      if (redLock.try_lock(std::chrono::milliseconds(30000))) {
-        LOG(debug) << "got lock:  " << fUuid;
-        auto presenceKeys = scan(*fClient, {TopPrefix.data(), fServiceName, "*", PresencePrefix.data()}, fSeparator);
-        std::unordered_set<std::string> uuidList; // existing uuids
+      try {
+        sw::redis::RedMutex mtx(fClient, "resource"); 
+        std::unique_lock<sw::redis::RedMutex> redLock(mtx, std::defer_lock);
+        if (redLock.try_lock()) {
+          LOG(debug) << "got lock:  " << fUuid;
+          auto presenceKeys = scan(*fClient, {TopPrefix.data(), fServiceName, "*", PresencePrefix.data()}, fSeparator);
+          std::unordered_set<std::string> uuidList; // existing uuids
     
-        if (!presenceKeys.empty()) {
-          fClient->mget(presenceKeys.cbegin(), presenceKeys.cend(), std::inserter(uuidList, uuidList.begin()));
-        }
-        std::string key = join({TopPrefix.data(), ServiceInstanceIndexPrefix.data(), fServiceName}, fSeparator);
-
-        std::unordered_map<std::string, std::string> hashIndexToUuid;
-        LOG(debug) << "'id' (instance id) is empty. calculate service-instance-index";
-        fClient->hgetall(key, std::inserter(hashIndexToUuid, hashIndexToUuid.begin()));
-        auto myUuid = boost::uuids::to_string(fUuid);
-        std::vector<std::string> indexExpired;
-        std::string myIndex;
-        for (const auto &[index, uuid] : hashIndexToUuid) {
-          if (uuidList.count(uuid)==0) {
-            LOG(warn) << " expired " << index << " " << uuid;
-            indexExpired.emplace_back(index);
-          } else if (uuid == myUuid) {
-            myIndex = index;
-            LOG(debug) << " same uuid is found. reuse the service instance-index: " << myIndex;
+          if (!presenceKeys.empty()) {
+            fClient->mget(presenceKeys.cbegin(), presenceKeys.cend(), std::inserter(uuidList, uuidList.begin()));
           }
-        }
-        if (!indexExpired.empty()) {
-          fClient->hdel(key, indexExpired.cbegin(), indexExpired.cend());
-        }
-        LOG(debug) << " number of expired uuids " << indexExpired.size();
-        
+          std::string key = join({TopPrefix.data(), ServiceInstanceIndexPrefix.data(), fServiceName}, fSeparator);
 
-        if (myIndex.empty()) {
-          for (auto index=0; ; ++index) {
-            myIndex = std::to_string(index);
-            if (fClient->hsetnx(key, myIndex, myUuid)) {
-              fRegisteredHashes.insert({key, myIndex});
-              fId = fServiceName + "-" + myIndex;
-              fPresence->key = join({TopPrefix.data(), fServiceName, fId, PresencePrefix.data()}, fSeparator);
-              fClient->setex(fPresence->key, fMaxTtl, boost::uuids::to_string(fUuid));
-              fRegisteredKeys.insert(fPresence->key);
-              LOG(debug) << " service instance-index: " << myIndex << " for uuid = " << fUuid;
-              break;
+          std::unordered_map<std::string, std::string> hashIndexToUuid;
+          LOG(debug) << "'id' (instance id) is empty. calculate service-instance-index";
+          fClient->hgetall(key, std::inserter(hashIndexToUuid, hashIndexToUuid.begin()));
+          auto myUuid = boost::uuids::to_string(fUuid);
+          std::vector<std::string> indexExpired;
+          std::string myIndex;
+          for (const auto &[index, uuid] : hashIndexToUuid) {
+            if (uuidList.count(uuid)==0) {
+              LOG(warn) << " expired " << index << " " << uuid;
+              indexExpired.emplace_back(index);
+            } else if (uuid == myUuid) {
+              myIndex = index;
+              LOG(debug) << " same uuid is found. reuse the service instance-index: " << myIndex;
+            }
+          }
+          if (!indexExpired.empty()) {
+            fClient->hdel(key, indexExpired.cbegin(), indexExpired.cend());
+          }
+          LOG(debug) << " number of expired uuids " << indexExpired.size();
+
+
+          if (myIndex.empty()) {
+            for (auto index=0; ; ++index) {
+              myIndex = std::to_string(index);
+              if (fClient->hsetnx(key, myIndex, myUuid)) {
+                fRegisteredHashes.insert({key, myIndex});
+                fId = fServiceName + "-" + myIndex;
+                fPresence->key = join({TopPrefix.data(), fServiceName, fId, PresencePrefix.data()}, fSeparator);
+                fClient->setex(fPresence->key, fMaxTtl, boost::uuids::to_string(fUuid));
+                fRegisteredKeys.insert(fPresence->key);
+                LOG(debug) << " service instance-index: " << myIndex << " for uuid = " << fUuid;
+                break;
+              }
             }
           }
         }
-      }
-        
-      if (redLock.owns_lock()) {
-        LOG(debug) << "unlock:  " << fUuid;
-        redLock.unlock();
-        break;
-      } else {
-        //LOG(debug) << "extend lock:  " << fUuid;
-        //redLock.extend_lock(std::chrono::milliseconds(30000));
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        if (redLock.owns_lock()) {
+          LOG(debug) << "unlock:  " << fUuid;
+          redLock.unlock();
+          break;
+        } else {
+          //LOG(debug) << "extend lock:  " << fUuid;
+          //redLock.extend_lock(std::chrono::milliseconds(30000));
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      } catch (const sw::redis::Error& e) {
+        LOG(error) << " caught exception (redis++) : " << e.what(); 
+      } catch (const std::exception& e) {
+        LOG(error) << " caught exception (std) : " << e.what(); 
+      } catch (...) {
+        LOG(error) << " caught exception : unknown"; 
       }
     }
     SetProperty("id", fId);

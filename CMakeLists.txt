@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 
-project(E16DAQController LANGUAGES CXX C)
+project(nestdaq LANGUAGES CXX C)
 
 message(STATUS "PROJECT_NAME: ${PROJECT_NAME}")
 
