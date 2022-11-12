@@ -178,8 +178,8 @@
   git clone https://github.com/sewenew/redis-plus-lus.git
   cd redis-plus-plus
 
-  # to use RedLock (distributed lock algorithm), checkout "recipes" branch
-  git checkout -b recipes recipes 
+  # to use RedLock (distributed lock algorithm), checkout "1.3.6" or later
+  git checkout -b 1.3.6 1.3.6
   cd ..
 
   # If "hiredis" is installed at non-default location, 
