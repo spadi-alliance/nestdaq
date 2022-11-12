@@ -3,6 +3,6 @@
 
 #include <string_view>
 
-static constexpr std::string_view DefaultDocRootPath{"@EX_DATADIR@/examples/controller"};
+static constexpr std::string_view DefaultDocRootPath{"@EX_DATADIR@/controller"};
 
 #endif

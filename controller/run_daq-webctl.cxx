@@ -12,6 +12,8 @@
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 
+#include <fairmq/FairMQLogger.h>
+
 #include "plugins/Constants.h"
 #include "plugins/tools.h"
 #include "controller/DaqWebControlDefaultDocRootPath.h"
@@ -53,7 +55,11 @@ bpo::options_description MakeOption()
   //
   ("rdb-dir", bpo::value<std::string>(), "directory for redis rdb")
   //
-  ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format");
+  ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format")
+  //
+  ("severity", bpo::value<std::string>()->default_value("info"), "severity level of FairLogger")
+  //
+  ("verbosity", bpo::value<std::string>()->default_value("medium"), "verbosity level of FairLogger");
 
   
   options.add_options()
@@ -108,6 +114,12 @@ int main(int argc, char* argv[])
     return ret;
   }
 
+  {
+    fair::Logger::SetConsoleColor(true);
+    fair::Logger::SetConsoleSeverity(vm["severity"].as<std::string>());
+    const auto verbosity = vm["verbosity"].as<std::string>();
+    fair::Logger::SetVerbosity(vm["verbosity"].as<std::string>());
+  }
 
   // ============================================
   // redis client setup
