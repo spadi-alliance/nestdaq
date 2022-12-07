@@ -98,7 +98,7 @@ REGISTER_FAIRMQ_PLUGIN(
   parameter_config,
   (fair::mq::Plugin::Version{0, 0, 0}), 
   "ParameterConfig <maintainer@daq.service.net>", 
-  "https://github.com/J-PARC-High-p",
+  "https://github.com/spadi-alliance/nestdaq",
   daq::service::ParameterConfigPluginProgramOptions
 ) // end of macro: REGISTER_FAIRMQ_PLUGIN
 
