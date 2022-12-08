@@ -211,7 +211,7 @@ REGISTER_FAIRMQ_PLUGIN(
   metrics,
   (fair::mq::Plugin::Version{0, 0, 0}),
   "Metrics <maintainer@daq.service.net>",
-  "https://github.com/J-PARC-High-p",
+  "https://github.com/spadi-alliance/nestdaq",
   daq::service::MetricsPluginProgramOptions
 ) // end of macro: REGISTER_FAIRMQ_PLUGIN
 

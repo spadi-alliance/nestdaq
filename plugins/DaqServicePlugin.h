@@ -128,13 +128,13 @@ private:
 auto PluginProgramOptions() -> fair::mq::Plugin::ProgOptions; 
 
 REGISTER_FAIRMQ_PLUGIN(
-  Plugin,                                    // Class name
-  daq_service,                               // Plugin name (lowercase chars only) 
-  (fair::mq::Plugin::Version{0, 0, 0}),      // Version
-  "DAQService <maintainer@daq.service.net>", // Maintainer
-  "https://github.com/J-PARC-High-p",        // Homepage
-  daq::service::PluginProgramOptions         // Free function which declares custom program options for the plugin
-                                             //    signature: () -> boost::optional<boost::program_options::options_decription>
+  Plugin,                                      // Class name
+  daq_service,                                 // Plugin name (lowercase chars only) 
+  (fair::mq::Plugin::Version{0, 0, 0}),        // Version
+  "DAQService <maintainer@daq.service.net>",   // Maintainer
+  "https://github.com/spadi-alliance/nestdaq", // Homepage
+  daq::service::PluginProgramOptions           // Free function which declares custom program options for the plugin
+                                               //    signature: () -> boost::optional<boost::program_options::options_decription>
 ) // end of macro: REGISTER_FAIRMQ_PLUGIN 
 
 } // namespace daq::service
