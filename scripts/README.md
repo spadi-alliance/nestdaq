@@ -26,14 +26,30 @@ Each Sampler sends data to one Sink with the same instance index.
   ./topology-1-1.sh
 ```
 
+```mermaid
+graph LR
+  Sampler-0 --> Sink-0
+  Sampler-1 --> Sink-1
+  Sampler-2 --> Sink-2
+```
+
 ## topology-n-n-m.sh
 A simple topology of _N_-**Sampler**s, _N_-**fairmq-splitter**s, and _M_-**Sink**s with the **PUSH-PULL** pattern. 
 Each Sampler sends data to one fairmq-splitter with the same instance index. 
-Then, the fairmq-splitter sends the data to a Sink. 
+Then, the fairmq-splitter sends the data to Sinks. 
+The `autoSubChannel true` flag is used to give each sub-socket a different `address:port` and to distinguish them by index.
 The fairmq-splitter determines the destination by the number of messages sent in a round-robin fashion.
 
 ```bash
   ./topology-n-n-m.sh
+```
+
+```mermaid
+graph LR
+  Sampler-0 --> fairmq-splitter-0
+  Sampler-1 --> fairmq-splitter-1
+  Sampler-2 --> fairmq-splitter-2
+  fairmq-splitter-0 & fairmq-splitter-1 & fairmq-splitter-2  --> Sink-0 & Sink-1
 ```
 
 ## mq-param.sh

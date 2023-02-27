@@ -26,7 +26,8 @@
   git clone --recursive https://github.com/RedisTimeSeries/RedisTimeSeries.git
   cd RedisTimeSeries
   git checkout -b v1.4.8 v1.4.8
-  make
+  make setup
+  make build
   # copy the library or link to the library
   cp bin/linux-x64-release/redistimeseries.so /your/favorite/path
 ```
@@ -52,6 +53,8 @@
   `N` in option `-jN` is the number of parallel jobs.  
    The installation directory can be configured by `--prefix=` or `-DCMAKE_INSTALL_REFIX=` option.  
 - Install boost  
+  If you want to use  the environment variable `HOME`, it is safe to use `$HOME` or `${HOME}` as the argument to the `b2` command.
+  The `~` character in the `b2` command argument is literally treated as `~ (tilda)`, not as the environment variable `HOME`.   
   The following example shows how to build boost 1.79.0.  
   ```bash
   git clone https://github.com/boostorg/boost.git

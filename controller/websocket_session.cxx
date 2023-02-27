@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <mutex>
 
+#include <fairmq/FairMQLogger.h>
+
 #include "controller/WebSocketHandle.h"
 #include "controller/websocket_session.h"
 
@@ -13,7 +15,7 @@ websocket_session::websocket_session(tcp::socket&& socket)
 //_____________________________________________________________________________
 void websocket_session::on_accept(beast::error_code ec)
 {
-  std::cout << __func__ << " : new connection" << std::endl;
+  LOG(debug) << " websocket session : new connection" << std::endl;
   if(ec) {
     return fail(ec, "websocket accept");
   }
@@ -46,13 +48,13 @@ void websocket_session::on_read(beast::error_code ec, std::size_t bytes_transfer
 
   // This indicates that the websocket_session was closed
   if(ec == websocket::error::closed) {
-    //std::cout << __FILE__ << ":" << __LINE__  << " " << __func__ << " " << ec.what() << std::endl;
+    LOG(warn) << "websocket session : " << ec.what();
     OnClose(id_);
     return;
   }
 
   if(ec) {
-    //std::cout << __FILE__ << ":" << __LINE__  << " " << __func__ << " " << ec.what() << std::endl;
+    LOG(warn) << "websocket session : " << ec.what();
     fail(ec, "websocket read");
   }
 

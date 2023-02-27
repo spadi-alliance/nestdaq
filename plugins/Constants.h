@@ -9,6 +9,8 @@ namespace daq::service {
 static constexpr std::string_view TopPrefix{"daq_service"};
 static constexpr std::string_view PresencePrefix{"presence"};
 static constexpr std::string_view HealthPrefix{"health"};
+static constexpr std::string_view FairMQStatePrefix{"fair-mq-state"};
+static constexpr std::string_view UpdateTimePrefix{"updatedTime"};
 static constexpr std::string_view ProgOptionPrefix{"option"};
 static constexpr std::string_view ServiceInstanceIndexPrefix{"service-instance-index"};
 
