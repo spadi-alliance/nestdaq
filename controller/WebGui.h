@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 // #include <boost/json.hpp> boost.json with gcc8 has a bug 
@@ -69,6 +70,7 @@ public:
 
   void SetDBDir(std::string_view value) { fDBDir = value.data(); }
   void SetDBFileNameFormat(std::string_view value) { fDBFileNameFormat = value.data(); }
+  void SetPollIntervalMS(uint64_t t) { fPollIntervalMS = t; }
   void SetSaveCommand(std::string_view value) { fSaveCommand = value.data(); }
   void SetSendFunction(std::function<void (unsigned int, const std::string&)> f) { fSend = f; }
   void SetTerminateFunction(std::function<void (void)> f) { fTerminate = f; }
@@ -79,10 +81,9 @@ public:
 private:
   // increment operation on redis and send the result to the web client
   void IncrementRunNumber(unsigned int connid);
-  void MakeTargetList(unsigned int connid);
-  void ParseDaqState(std::string_view msg); 
+  void PollState();
   void ProcessExpiredKey(std::string_view key);
-  // read operation on redis and send the returned value to the web client
+  // read operation on redis (and send the returned value to the web client)
   void ReadCommandChannel(unsigned int connid);
   void ReadLatestRunNumber(unsigned int connid);
   void ReadRunNumber(unsigned int connid);
@@ -91,12 +92,7 @@ private:
   // send command via redis pub/sub channels
   void RedisPublishDaqCommand(unsigned int connid, const boost::property_tree::ptree& arg);
   void RedisSet(unsigned int connid, const boost::property_tree::ptree& arg);
-  void SendInstanceState(std::string_view service, std::string_view instName, const InstanceState &inst);
-  void SendServiceStateSummary(std::string_view service, const ServiceState &ss);
-  // update local variables with the selected values by the web client 
-  void SetCommandTargetInstance(unsigned int connid, const boost::property_tree::ptree &arg);
-  // update local variables and send them to the web client
-  void SetCommandTargetService(unsigned int connid, const boost::property_tree::ptree& arg);
+  void SendStateSummary(const std::map<std::string, ServiceState> &summaryTable);
   void SubscribeToRedisPubSub(); 
   // write operation on redis
   void WriteRunNumber(unsigned int connid, const boost::property_tree::ptree& arg);
@@ -111,14 +107,12 @@ private:
   // for redis client 
   std::string fSeparator;
   std::string fChannelName;
-  std::unordered_map<unsigned int, std::map<std::string, bool>> fCommandTargetService;
-  std::unordered_map<unsigned int, std::map<std::string, bool>> fCommandTargetInstance;
   std::shared_ptr<sw::redis::Redis> fClient;
-  std::mutex fStateMutex;
-  std::map<std::string, ServiceState> fDeviceState;
 
   std::string fRedisKeyEventChannelName;
-  std::thread fStateListenThread;
+  std::thread fRedisPubSubListenThread;
+  std::thread fStatePollThread;
+  uint64_t fPollIntervalMS{0};
 
   std::string fDBDir;
   std::string fDBFileNameFormat;

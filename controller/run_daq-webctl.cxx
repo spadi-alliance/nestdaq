@@ -55,11 +55,19 @@ bpo::options_description MakeOption()
   //
   ("rdb-dir", bpo::value<std::string>(), "directory for redis rdb")
   //
+  ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond")
+  //
   ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format")
   //
-  ("severity", bpo::value<std::string>()->default_value("info"), "severity level of FairLogger")
+  ("log-to-file", bpo::value<std::string>()->default_value(""), "FairLogger Log output to a file")
   //
-  ("verbosity", bpo::value<std::string>()->default_value("medium"), "verbosity level of FairLogger");
+  ("file-severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (file) : trace, debug, info, state, warn, error, fatal, nolog")
+  //
+  ("severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (console): trace, debug, info, state, warn, error, fatal, nolog")
+  //
+  ("verbosity", bpo::value<std::string>()->default_value("medium"), "FairLogger Log verbosity level: veryhigh, high, medium, low")
+  //
+  ("color", bpo::value<bool>()->default_value(true), "FairLogger Log color (true/false)");
 
   
   options.add_options()
@@ -85,18 +93,18 @@ auto ParseHttpUri(const std::string& uri) -> const std::tuple<std::string, std::
   //  }
   //std::cout << " count = " << count << std::endl;
   } else {
-    std::cerr << "error: " __FILE__ << ":" << __LINE__ << " " << __func__ 
-              << "\n  std::regex_match failed: uri = " << uri 
-              << "\n  It should be (scheme)://(address):(port)" << std::endl;
+    LOG(error) << "error: " << __FILE__ << ":" << __LINE__ << " " << __func__ 
+               << "\n  std::regex_match failed: uri = " << uri 
+               << "\n  It should be (scheme)://(address):(port)";
     return {};
   }
 
-  // std::cout << " matchResult.size() = " << matchResult.size() << std::endl;
+  // LOG(debug) << " matchResult.size() = " << matchResult.size();
   if (matchResult.size()!=4) {
-    std::cerr << "error: " << __FILE__ << ":" << __LINE__ << " " << __func__ 
-              << "\n  http server URI format is invalid. URI = " << uri
-              << "\n  number of matched parts = " << matchResult.size() 
-              << "\n  It should be (scheme)://(address):(port)" << std::endl;
+    LOG(error) << "error: " << __FILE__ << ":" << __LINE__ << " " << __func__ 
+               << "\n  http server URI format is invalid. URI = " << uri
+               << "\n  number of matched parts = " << matchResult.size() 
+               << "\n  It should be (scheme)://(address):(port)";
     return {};
   }
   return {matchResult[1], matchResult[2], matchResult[3]}; 
@@ -115,10 +123,16 @@ int main(int argc, char* argv[])
   }
 
   {
-    fair::Logger::SetConsoleColor(true);
-    fair::Logger::SetConsoleSeverity(vm["severity"].as<std::string>());
+    const auto logFile = vm["log-to-file"].as<std::string>();
     const auto verbosity = vm["verbosity"].as<std::string>();
-    fair::Logger::SetVerbosity(vm["verbosity"].as<std::string>());
+    fair::Logger::SetVerbosity(verbosity);
+    if (logFile.empty()) {
+      fair::Logger::SetConsoleColor(vm["color"].as<bool>());
+      fair::Logger::SetConsoleSeverity(vm["severity"].as<std::string>());
+    } else {
+      fair::Logger::InitFileSink(vm["file-severity"].as<std::string>(), logFile);
+      fair::Logger::SetConsoleSeverity("nolog");
+    }
   }
 
   // ============================================
@@ -126,11 +140,18 @@ int main(int argc, char* argv[])
   const auto redisUri  = vm["redis-uri"].as<std::string>();
   const auto channel   = daq::service::CommandChannelName.data(); 
   const auto sep       = vm["separator"].as<std::string>();
-  std::cout << " redis-server URI  = " << redisUri << std::endl;
-  std::cout << " command-channel   = " << channel  << std::endl;
-  std::cout << " separator         = " << sep      << std::endl;
+  LOG(info) << "redis-server URI  = " << redisUri;
+  LOG(info) << "command-channel   = " << channel;
+  LOG(info) << "separator         = " << sep;
 
   daqControl = std::make_unique<WebGui>();
+
+  if (vm.count("rdb-dir")>0) {
+    daqControl->SetDBDir(vm["rdb-dir"].as<std::string>());
+    daqControl->SetDBFileNameFormat(vm["dbfilename-format"].as<std::string>());
+    daqControl->SetSaveCommand(vm["save-command"].as<std::string>());
+  }
+  daqControl->SetPollIntervalMS(vm["poll-interval"].as<uint64_t>());
   if (!daqControl->ConnectToRedis(redisUri, channel, sep)) {
     return EXIT_FAILURE;
   }
@@ -138,12 +159,13 @@ int main(int argc, char* argv[])
   daqControl->SetSendFunction([](auto connid, const auto& arg){ 
     const auto &websocketIdList = daqControl->GetWebSocketIdList(); 
     if (websocketIdList.empty()) {
-      //std::cout << __FILE__ << ":" << __LINE__ << " no clients" << std::endl;
+      LOG(info) << " no websocket clients";
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       return;
     }
     if (connid==0) { // broadcast message to registered clients 
       for (const auto& [i, t] : websocketIdList) {
-        //std::cout << __FILE__ << ":" << __LINE__ << " id = " << i << ", msg = " << arg << std::endl;
+        LOG(debug) << "Send message to websocket client id = " << i << ", msg = " << arg;
         Write(i, arg);
       }
     } else {
@@ -151,27 +173,22 @@ int main(int argc, char* argv[])
     }
   }); 
   daqControl->SetTerminateFunction([](){ 
-    std::cout << __FILE__ << ":" << __LINE__ << " Termination is requested." << std::endl;
+    LOG(info) << " Termination is requested.";
   });
 
-  if (vm.count("rdb-dir")>0) {
-    daqControl->SetDBDir(vm["rdb-dir"].as<std::string>());
-    daqControl->SetDBFileNameFormat(vm["dbfilename-format"].as<std::string>());
-    daqControl->SetSaveCommand(vm["save-command"].as<std::string>());
-  }
 
   // ============================================
   // http server setup
   const auto httpUri = vm["http-uri"].as<std::string>();
-  std::cout << " http serve URI = " << httpUri << std::endl;
+  LOG(info) << "http serve URI = " << httpUri;
   const auto &[httpScheme, httpAddress, httpPort] = ParseHttpUri(httpUri);
-  std::cout << " http server scheme  = " << httpScheme 
-            << "\n http server address = " << httpAddress 
-            << "\n http server port    = " << httpPort << std::endl;
+  LOG(info) << "http server scheme  = " << httpScheme;
+  LOG(info) << "http server address = " << httpAddress;
+  LOG(info) << "http server port    = " << httpPort;
   const auto nThreads = vm["threads"].as<unsigned int>();
-  std::cout << " http threads = " << nThreads << std::endl;
+  LOG(info) << "http threads = " << nThreads;
   const auto docRoot = vm["doc-root"].as<std::string>();
-  std::cout << " doc-root = " << docRoot << std::endl;
+  LOG(info) << "doc-root = " << docRoot;
 
   HttpWebSocketServer server(nThreads);
   server.Run(httpScheme, httpAddress, httpPort, docRoot);
@@ -188,7 +205,7 @@ void OnClose(unsigned int id)
     wsSessions.erase(id);
   }
   daqControl->ProcessData(id, R"({ "command": "ON_CLOSED" })");
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " done" << std::endl;
+  LOG(debug) << __func__ << " websocket id = " << id << " done";
 }
 
 //_____________________________________________________________________________
@@ -200,14 +217,14 @@ void OnConnect(const std::shared_ptr<websocket_session> &session)
     wsSessions.emplace(id, session);
   }
   daqControl->ProcessData(id, R"({ "command": "ON_CONNECT" })"); 
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " done" << std::endl;
+  LOG(trace) << __func__ << " websocket id = " << id << " done";
 }
 
 //_____________________________________________________________________________
 void OnRead(unsigned int id, const std::string& message)
 {
   daqControl->ProcessData(id, message);
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " done" << std::endl;
+  LOG(trace) << __func__ << " websocket id = " << id << " done";
 }
 
 //_____________________________________________________________________________
@@ -227,5 +244,5 @@ void Write(unsigned int id, const std::string& message)
   if (session) {
     session->write(message);
   }
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " done" << std::endl;
+  LOG(trace) << __func__ << " websocket id = " << id << " done";
 }

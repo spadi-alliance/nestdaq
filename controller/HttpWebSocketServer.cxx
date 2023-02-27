@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 
+#include <fairmq/FairMQLogger.h>
+
 #include "controller/listener.h"
 #include "controller/HttpWebSocketServer.h"
 
@@ -35,7 +37,7 @@ void HttpWebSocketServer::Run(std::string_view scheme, std::string_view address,
   // Capture SIGINT and SIGTERM to perform a clean shutdown
   fSignals = std::make_shared<net::signal_set>(*fContext, SIGINT, SIGTERM); 
   fSignals->async_wait([&ioc = *fContext](const beast::error_code &ec, int n){ 
-    std::cout << "Got signal : ec = " << ec.what() << ", n = " << n << std::endl;
+    LOG(fatal) << "Got signal : ec = " << ec.what() << ", n = " << n;
     ioc.stop(); 
   });
 

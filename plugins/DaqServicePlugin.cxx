@@ -215,7 +215,7 @@ Plugin::Plugin(std::string_view name,
           LOG(info) << MyClass << " state : " << stateName;
           fStateQueue.Push(newState);
           fClient->hset(fHealth->key, "fair:mq:state", stateName);
-          PublishDaqState(stateName, date());
+          fClient->set(fFairMQStateKey, stateName);
           WriteProgOptions();
           ReadRunNumber();
       switch (newState) {
@@ -613,20 +613,6 @@ void Plugin::ChangeDeviceStateBySingleCommand(std::string_view cmd)
 }
 
 //_____________________________________________________________________________
-void Plugin::PublishDaqState(std::string_view state, std::string_view lastChecked)
-{
-  boost::property_tree::ptree obj; 
-  obj.put("command", "redis-pub");
-  obj.put("value", "daq-state");
-  obj.put("service", fServiceName);
-  obj.put("id", fId); // short name
-  obj.put("state", state.data());
-  obj.put("date", lastChecked.data());
-  const auto &s = to_string(obj);
-  fClient->publish(daq::service::StateChannelName, s);
-}
-
-//_____________________________________________________________________________
 void Plugin::ReadRunNumber()
 {
   auto key = join({RunInfoPrefix.data(), RunNumber.data()}, fSeparator);
@@ -691,7 +677,11 @@ void Plugin::Register()
     fProgOptionKeyName = join({TopPrefix.data(), fServiceName, fId, ProgOptionPrefix.data()}, fSeparator);
 
     LOG(debug) << "(Register) id = " << fId << ", service = " << fServiceName;  
-    fHealth->key   = join({TopPrefix.data(), fServiceName, fId, HealthPrefix.data()}, fSeparator);
+    fHealth->key    = join({TopPrefix.data(), fServiceName, fId, HealthPrefix.data()}, fSeparator);
+    fFairMQStateKey = join({TopPrefix.data(), fServiceName, fId, FairMQStatePrefix.data()}, fSeparator);
+    fUpdateTimeKey  = join({TopPrefix.data(), fServiceName, fId, UpdateTimePrefix.data()}, fSeparator);
+    fRegisteredKeys.insert(fFairMQStateKey);
+    fRegisteredKeys.insert(fUpdateTimeKey);
     LOG(debug) << " precense (key) = " << fPresence->key << ", presence (ttl) = " << fMaxTtl; 
 
 
@@ -769,6 +759,8 @@ void Plugin::ResetTtl()
              std::make_pair("uptime", std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(uptimeNsec).count())), 
             })
       .setex(fPresence->key, fMaxTtl, boost::uuids::to_string(fUuid))
+      .setex(fFairMQStateKey, fMaxTtl, GetStateName(GetCurrentDeviceState()))
+      .setex(fUpdateTimeKey, fMaxTtl, lastChecked)
       .expire(fHealth->key, fMaxTtl)
       .expire(fProgOptionKeyName, fMaxTtl);
   if (fTopology) {
@@ -988,31 +980,32 @@ void Plugin::SubscribeToDaqCommand()
       LOG(error) << MyClass << " on_message(MESSAGE): missing command";
       return;
     }
-    if (*cmd == "get_state") {
-      const auto &[uptimeNsec, currentTime] = update_date(fHealth->createdTimeSystem, fHealth->createdTime);
-      PublishDaqState(GetStateName(GetCurrentDeviceState()), date());
-      return; 
-    } else if (*cmd == "change_state") {
+    if (*cmd == "change_state") {
       const auto& val = obj. template get_optional<std::string>("value");
-      const auto& service = obj. template get_optional<std::string>("service");
-      const auto& instance = obj. template get_optional<std::string>("instance");
+      std::unordered_set<std::string> services;
+      for (const auto& x : obj.get_child("services")) {
+        services.emplace(x.second. template get_value<std::string>());
+      }
+      std::unordered_set<std::string> instances;
+      for (const auto& x : obj.get_child("instances")) {
+        instances.emplace(x.second. template get_value<std::string>());
+      }
       if (!val) {
         LOG(error) << MyClass << " on_message() change_state : new state is not specified.";
         return; 
       }
-      if (!service) {
+      if (services.empty()) {
         LOG(error) << MyClass << " on_message() change_state : service is not specified.";
         return; 
       }
-      if (!instance) {
+      if (instances.empty()) {
         LOG(error) << MyClass << " on_message() change_state : instance is not specified.";
         return; 
       }
-      const auto& s = *service;
-      const auto& id = *instance;
       bool isSingleCommand = false; // TO DO
-      if (((s=="all") || 
-           ((s==fServiceName) && ((id=="all") || (id==fId))))) {
+      const std::string longInstanceId = daq::service::join({fServiceName, fId}, fSeparator);
+      if ((services.count("all")>0) || 
+           ((services.count(fServiceName)>0) && ((instances.count("all")>0) || (instances.count(longInstanceId)>0)))) {
         if (isSingleCommand) {
           ChangeDeviceStateBySingleCommand(*val);
         } else {

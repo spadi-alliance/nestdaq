@@ -73,7 +73,6 @@ public:
 private:
   void ChangeDeviceStateByMultiCommand(std::string_view cmd);
   void ChangeDeviceStateBySingleCommand(std::string_view cmd);
-  void PublishDaqState(std::string_view state, std::string_view lastChecked);
   void ReadRunNumber();
   void Register();
   void ResetTtl(); 
@@ -102,6 +101,8 @@ private:
   //std::string fSeparator;
   std::unique_ptr<Presence> fPresence;
   std::unique_ptr<Health> fHealth;
+  std::string fFairMQStateKey;
+  std::string fUpdateTimeKey;
   std::string fProgOptionKeyName;
   long long fMaxTtl;
   long long fTtlUpdateInterval;

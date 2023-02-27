@@ -74,15 +74,14 @@
     </p>
     
     <h2>State Summary</h2>
-      <input type="button" onclick="redis_publish('get_state')" value="Get" data-toggle="tool-tip" title="Get instance list and state via redis-pubsub">
-      <input type="button" onclick="ResetStateList()" value="Reset" data-toggle="tool-tip" title="Reset instance list and state (for shrinking list)">
     <p id="State Summary"></p>
+      <input type="button" id="buttonInstanceTable" onclick="ToggleInstanceTable(this)" value="Show details" data-toggle="tool-tip" title="Show instance state table">
     <p id="Instance State"></p>
 
     <h2>Select command target</h2>
     <p id="commandTarget"> 
-      <select  id="commandTargetServiceSelect"  onChange="SendSelectedResult('commandTargetServiceSelect')"  multiple size=10></select>
-      <select  id="commandTargetInstanceSelect" onChange="SendSelectedResult('commandTargetInstanceSelect')" multiple size=10></select>
+      <select  id="serviceSelector"  multiple size=10></select>
+      <select  id="instanceSelector"  multiple size=10></select>
     </p>
    
     
@@ -105,8 +104,6 @@
     // -------------- table --------------------
     const instStateTable    = CreateInstanceStateTable();
     const stateSummaryTable = CreateStateSummaryTable();
-    const stateList    = new Array();
-    const stateSummary = new Array();
 
     // --------------- websocket ---------------
     let path = window.location.href;
@@ -120,7 +117,6 @@
     socket.onopen = function() {
        console.log('websocket initialized');
        this._ready = true;
-       redis_publish('get_state');
     }
 
     socket.onmessage = function(e) {
@@ -129,7 +125,7 @@
          const s = "unsupported message kind: " + (typeof msg);
          console.log(s);
          alert(s);
-         return 
+         return;
        } else {
          if (msg.startsWith('error:')) {
            alert(msg);
@@ -138,8 +134,9 @@
          } else if (msg.startsWith('WebSocket Connected ID:')) {
            UpdateWebSocketConnectedIdList(msg);
          } else {
+           //console.log(msg);
            const obj = JSON.parse(msg);
-           //console.log(obj.type);
+           //console.log('obj.type : ' + obj.type);
 
            if (obj.type=='error') {
             alert(obj.value);
@@ -147,16 +144,8 @@
             SetRunNumber(obj.value);
            } else if (obj.type=='set latest_run_number') {
             SetLatestRunNumber(obj.value); 
-           } else if (obj.type=='state-summary') {
-            UpdateStateSummary(obj);
-            //SendSelectedResult('commandTargetServiceSelect');
-           } else if (obj.type=='instance-state') {
-            UpdateInstanceState(obj);
-            //SendSelectedResult('commandTargetInstanceSelect');
-           } else if (obj.type=='selected services') {
-            UpdateTargetServices(obj);
-           } else if (obj.type=='selected instances') {
-            UpdateTargetInstances(obj);
+           } else if (obj.type=='state-summary-table') {
+            UpdateSummaryTable(obj);
            }
           
            //AddOutput("txt: " + msg);
@@ -311,15 +300,28 @@
     
     // --------------------------------------------------
     function redis_publish(arg) {
-      SendMessage('{ "command": "redis-publish", "value": "' + arg + '" }');
+      //console.log(this.constructor.name + ': arg = ' + arg);
+      const serviceOptions  = document.getElementById('serviceSelector'); 
+      const srv = [];
+      for (let i=0; i< serviceOptions.length; i++) {
+        if (serviceOptions[i].selected) {
+          srv.push(serviceOptions[i].text);
+        }
+      }
+      const instOptions  = document.getElementById('instanceSelector'); 
+      const inst = [];
+      for (let i=0; i< instOptions.length; i++) {
+        if (instOptions[i].selected) {
+          inst.push(instOptions[i].text);
+        }
+      }
+
+      const cmd = { command: 'redis-publish', value: arg, services: srv, instances: inst };
+      const msg = JSON.stringify(cmd);
+      console.log(this.constructor.name + ': msg = ' + msg);
+      SendMessage(msg);
     }
 
-
-    // --------------------------------------------------
-    function ResetStateList() {
-      SendMessage('{ "command": "resetStateList" }');
-      redis_publish('get_state');
-    }
 
     // --------------------------------------------------
     function SendMessage(arg) {
@@ -327,23 +329,6 @@
        if (socket) {
           socket.send(arg);
        }
-    }
-    // --------------------------------------------------
-    function SendSelectedResult(arg) {
-      //console.log(this.constructor.name + ': arg = ' + arg);
-      const sel  = document.getElementById(arg); 
-      const arr = [];
-      for (let i=0; i< sel.length; i++) {
-        if (sel[i].selected) {
-          arr.push(sel[i].text);
-        }
-      }
-      const msg = { command: arg };
-      msg["items"] = arr;
-      const s = JSON.stringify(msg);
-      //console.log(this.constructor.name + ': selected = ' + arr);
-      //console.log('SendSelectedResult: ' + s);
-      SendMessage(s);
     }
 
     // --------------------------------------------------
@@ -377,93 +362,34 @@
     }
     
     // --------------------------------------------------
-    function UpdateInstanceState(arg) {
-      // -- -- -- -- -- -- -- -- 
-      // update object list
-      // -- -- -- -- -- -- -- -- 
-      const long_name = arg.service + ':' + arg.instance;
-      const index = stateList.findIndex((e) => (e.long_name === long_name));
-      //console.log('UpdateInstanceState: index = ' + index + ' ' + long_name);
-      if (index < 0) {
-        const obj = { long_name: long_name, service: arg.service, instance: arg.instance, state: arg.state, date: arg.date };
-        stateList.push(obj);
-        //const new_row = instStateTable.insertRow(-1);
-        //for (let i=0; i<4; ++i) {
-        //  new_row.insertCell(-1);
-        //}
+    function ToggleInstanceTable(arg) {
+      if (arg.value == "Hide details") {
+        arg.value = "Show details";
       } else {
-        const obj = stateList[index];
-        obj.state = arg.state;
-        obj.date  = arg.date;
+        arg.value = "Hide details";
       }
 
-      // sort list by long_name
-      stateList.sort(function (a, b) {
-        if (a.long_name > b.long_name) { 
-          return 1;
-        } else {
-          return -1;
-        }
-      });
-      // -- -- -- -- -- -- -- -- 
-      // update HTML table contents
-      // -- -- -- -- -- -- -- -- 
-      //for (let i=0; i<stateList.length; ++i) {
-      //  const obj = stateList[i];
-      //  const row = instStateTable.rows[i+1]; // rows[0] == thead 
-      //  const c = row.cells;
-      //  c[0].innerHTML = obj.service;
-      //  c[1].innerHTML = obj.instance; // short name
-      //  c[2].innerHTML = obj.state;
-      //  c[3].innerHTML = obj.date;
-      //}
-
-      const v = new Array(); 
-      for (let i=0; i<stateList.length; ++i) {
-        v.push({ name: stateList[i].service + ':' + stateList[i].instance });
-      }
-      const o = { instances: v };
-      UpdateTargetInstances(o);
     }
 
     // --------------------------------------------------
-    function UpdateStateSummary(arg) {
-
-      // -- -- -- -- -- -- -- -- --
-      // update object list
-      // -- -- -- -- -- -- -- -- --
-      const index = stateSummary.findIndex((e) => (e.service === arg.service));
-      //console.log('UpdateStateSummary: index = ' + index + ' ' + arg.service);
-      if (index < 0) {
-        const obj = { service: arg.service, date: arg.date, n_instances: arg.n_instances, counts: arg.counts };
-        stateSummary.push(obj);
-        const new_row = stateSummaryTable.insertRow(-1);
-        for (let i=0; i<(obj.counts.length+3); i++) {
-          new_row.insertCell(-1);
-        }
-      } else {
-        const obj       = stateSummary[index];
-        obj.date        = arg.date;
-        obj.n_instances = arg.n_instances;
-        obj.counts      = arg.counts;
+    function UpdateSummaryTable(arg) {
+      const services = arg.services;
+     
+      //console.log('UpdateSummaryTable: services.length ' + services.length);
+      //console.log('UpdateSummaryTable: stateSummaryTable.length ' + stateSummaryTable.rows.length);
+      
+      // update state summary 
+      for (let i=stateSummaryTable.rows.length; stateSummaryTable.rows.length>1; --i) {
+        stateSummaryTable.deleteRow(-1);
       }
-
-      // sort list by service name
-      stateSummary.sort(function (a, b) {
-        if (a.service > b.service) {
-          return 1;
-        } else {
-          return -1;
+      for (let i=0; i<services.length; ++i) {
+        const row = stateSummaryTable.insertRow(-1);
+        for (let j=0; j<(services[0].counts.length+3); j++) {
+          row.insertCell(-1);
         }
-      });
-
-      // -- -- -- -- -- -- -- -- --
-      // update table contents
-      // -- -- -- -- -- -- -- -- --
-      for (let i=0; i<stateSummary.length; ++i) {
-        const obj = stateSummary[i];
-        const row = stateSummaryTable.rows[i+1]; // rows[0] == thead
-        const c = row.cells;
+        const obj = services[i];
+        //const row = stateSummaryTable.rows[i+1]; // rows[0] == thead
+        const c   = row.cells;
         c[0].innerHTML = obj.service;
         c[1].innerHTML = obj.n_instances;
         for (let j=0; j<obj.counts.length; ++j) {
@@ -473,12 +399,49 @@
         c[obj.counts.length+2].innerHTML = obj.date;
       }
 
-      const v = new Array(); 
-      for (let i=0; i<stateSummary.length; ++i) {
-        v.push({ name: stateSummary[i].service });
+      // update instance state table
+      for (let i=instStateTable.rows.length; instStateTable.rows.length>1; --i) {
+        instStateTable.deleteRow(-1);
       }
-      const o = { services: v };
-      UpdateTargetServices(o);
+      const btnVal = document.getElementById('buttonInstanceTable').value;
+      // The value of 'btnVal' corresponds to the next show/hide tate. 
+      // i.e. The current value means the opposite of the show/hide state. 
+      if (btnVal === 'Hide details') { 
+        for (let i=0; i<services.length; ++i) {
+          const srv = services[i];
+          for (let j=0; j<srv.instances.length; ++j) {
+            const row = instStateTable.insertRow(-1);
+            for (let i=0; i<4; ++i) {
+              row.insertCell(-1);
+            }
+            const obj = srv.instances[j];
+            const c = row.cells;
+            c[0].innerHTML = obj.service;
+            c[1].innerHTML = obj.instance;
+            c[2].innerHTML = obj.state;
+            c[3].innerHTML = obj.date;
+          }
+        }
+      } 
+
+      // rename field: service -> name
+      const srvArray = new Array(); 
+      for (let i=0; i<services.length; ++i) {
+        srvArray.push({ name: services[i].service });
+      }
+      const srvObj = { services: srvArray, changed: arg.service_list_changed };
+      UpdateTargetServices(srvObj);
+      
+      const instArray = new Array();
+      let instChanged = arg.instance_list_changed;
+      for (let i=0; i<services.length; ++i)  {
+        const srv = services[i];
+        for (let j=0; j<srv.instances.length; ++j) {
+          instArray.push({ name: srv.service + ':' + srv.instances[j].instance });
+        }
+      }
+      const instObj = { instances: instArray, changed: instChanged };
+      UpdateTargetInstances(instObj);
     }
 
     // --------------------------------------------------
@@ -487,7 +450,12 @@
       // update HTML selection list
       // -- -- -- -- -- -- -- -- 
       // clear selection list
-      const sel = document.getElementById("commandTargetInstanceSelect");
+      const sel = document.getElementById("instanceSelector");
+      if (sel.options.length>0) {
+      if  (arg.changed === 'false') {
+        return;
+      }
+      }
       while (sel.lastChild) {
         sel.removeChild(sel.lastChild);
       }
@@ -518,8 +486,14 @@
       // -- -- -- -- -- -- -- -- --
       // update selection list
       // -- -- -- -- -- -- -- -- --
+
       // clear selection list
-      const sel = document.getElementById("commandTargetServiceSelect");
+      const sel = document.getElementById("serviceSelector");
+      if (sel.options.length>0) {
+        if  (arg.changed === 'false') {
+          return;
+        }
+      }
       while (sel.lastChild) {
         sel.removeChild(sel.lastChild);
       }

@@ -1,3 +1,5 @@
+#include <fairmq/FairMQLogger.h>
+
 #include "controller/websocket_session.h"
 #include "controller/http_session.h"
 
@@ -57,16 +59,15 @@ void http_session::on_read(beast::error_code ec, std::size_t bytes_transferred)
 
   // This means they closed the connection
   if(ec == http::error::end_of_stream) {
-    //std::cout << __FILE__ << ":" << __LINE__  << " " << __func__ << " " << ec.what() << std::endl;
+    LOG(warn)  << "boost::beast http session: what = " << ec.what() << std::endl;
     return do_close();
   }
 
   if(ec) {
-    //std::cout << __FILE__ << ":" << __LINE__  << " " << __func__ << " " << ec.what() << std::endl;
     return fail(ec, "http read");
   }
 
-  std::cout << " parser_->get() " << parser_->get() << std::endl;
+  LOG(debug) << " parser_->get() " << parser_->get();
   // See if it is a WebSocket Upgrade
   if(websocket::is_upgrade(parser_->get())) {
     // Create a websocket session, transferring ownership
@@ -111,6 +112,7 @@ void http_session::do_close()
 {
   // Send a TCP shutdown
   beast::error_code ec;
+  LOG(debug) << "boost::beast http session: Send a TCP shutdown";
   stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
 
   // At this point the connection is closed gracefully

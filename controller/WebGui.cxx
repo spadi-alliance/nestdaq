@@ -14,6 +14,7 @@
 #include <fairmq/FairMQLogger.h>
 
 #include "plugins/Constants.h"
+#include "plugins/Functions.h"
 #include "plugins/tools.h"
 #include "controller/WebGui.h"
 
@@ -48,30 +49,13 @@ std::string GetRedisDBNumber(const std::string& uri)
   if (std::regex_match(uri, matchResult, pattern)) {
     int count{0};
     for (const auto &s : matchResult) {
-      std::cout << count++ << " " << s << std::endl;
+      LOG(debug) << count++ << " " << s;
     }
   } else {
-    std::cerr << MyClass << ":" << __LINE__ << " " << __func__ << " std::regex_match failed. uri = " << uri << std::endl;
+    LOG(error) << " std::regex_match failed. uri = " << uri;
   }
   const auto &db = matchResult[4].str();
   return db.empty() ? "0" : db;
-}
-
-//_____________________________________________________________________________
-void ShowInstanceState(std::string_view service, std::string_view id, const InstanceState& inst) 
-{
-  // id is short style
-  std::cout << " " << service << ":" << id << " " << inst.state << " " << inst.date << std::endl;
-}
-
-//_____________________________________________________________________________
-void ShowServiceState(const std::map<std::string, ServiceState>& deviceStates)
-{
-  for (const auto& [serviceName, s] : deviceStates) {
-    for (const auto& [id, inst] : s.instances) {
-      ShowInstanceState(serviceName, id, inst);
-    }
-  }
 }
 
 //_____________________________________________________________________________
@@ -81,7 +65,7 @@ void WebGui::AddWebSocketId(unsigned int connid)
   fWebSocketIdList.emplace_back(connid, d);
   std::string msg{"My WebSocket Connection ID: "};
   msg += std::to_string(connid) + " (Date: " + d + ")";
-  std::cout <<  __func__ << " " << msg << std::endl;
+  LOG(info) <<  __func__ << " " << msg;
   Send(connid, msg.data());
 }
 
@@ -90,16 +74,16 @@ bool WebGui::ConnectToRedis(std::string_view redisUri,
                             std::string_view commandChannelName, 
                             std::string_view separator)
 {
-  std::cout << __func__ << std::endl;
   // setup redis client 
   if (redisUri.empty()) {
       throw std::runtime_error("redis server uri is not specified.");
   }
   fClient = std::make_shared<sw::redis::Redis>(redisUri.data());
   if (!fClient) {
-    std::cerr << " failed to connect to redis" << std::endl;
+    LOG(error) << " failed to connect to redis";
     return false;
   }
+  LOG(info) << "connected to redis";
   fChannelName = commandChannelName.data();
   fSeparator = separator.data();
   fClient->command("client", "setname", MyClass.data());
@@ -109,12 +93,16 @@ bool WebGui::ConnectToRedis(std::string_view redisUri,
   fClient->command("config", "set", "notify-keyspace-events", "Ex");
   const auto &db = GetRedisDBNumber(redisUri.data()); 
   fRedisKeyEventChannelName = "__keyevent@"s + db + "__:expired"s;
-  std::cout << " keyevent = " << fRedisKeyEventChannelName << std::endl;
 
-  fStateListenThread = std::thread([this]() {
+  fRedisPubSubListenThread = std::thread([this]() {
     SubscribeToRedisPubSub();
   });
-  fStateListenThread.detach();
+  fRedisPubSubListenThread.detach();
+
+  fStatePollThread = std::thread([this]() {
+    PollState();
+  });
+  fStatePollThread.detach();
   return true;
 }
 
@@ -122,7 +110,7 @@ bool WebGui::ConnectToRedis(std::string_view redisUri,
 // read/write operation on redis and send the value to the web client
 void WebGui::CopyLatestRunNumber(unsigned int connid)
 {
-  std::cout << __func__ << " connid = " << connid << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid << std::endl;
   std::string name{"run_info" + fSeparator + "run_number"};
   auto ret = fClient->get(name);
   if (!ret) {
@@ -147,7 +135,7 @@ void WebGui::CopyLatestRunNumber(unsigned int connid)
 // increment operation on redis and send the value to the web client
 void WebGui::IncrementRunNumber(unsigned int connid)
 {
-  std::cout << __func__ << " connid = " << connid << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid << std::endl;
   std::string name{"run_info" + fSeparator + "run_number"};
   
   auto newValue = fClient->incr(name);
@@ -178,11 +166,6 @@ void WebGui::InitializeFunctionList()
         SendWebSocketIdList();
       }
     },
-    
-    {"resetStateList", [this](auto id, const auto &arg) {
-      std::lock_guard<std::mutex> lock{fStateMutex};
-      fDeviceState.clear();
-    } },
 
     // send command via redis pub/sub channels
     {"redis-publish", [this](auto id, const auto &arg) { RedisPublishDaqCommand(id, arg); } }, 
@@ -196,128 +179,96 @@ void WebGui::InitializeFunctionList()
     // increment operation on redis 
     {"redis-incr", [this](auto id, const auto &arg) { RedisIncr(id, arg); } }, 
 
-    // update local variables and send them to the web client
-    {"commandTargetServiceSelect", [this](auto id, const auto &arg) { SetCommandTargetService(id, arg); } },
-
-    // update local variables with the selected values by the web client 
-    {"commandTargetInstanceSelect", [this](auto id, const auto &arg) { SetCommandTargetInstance(id, arg); } },
-
   });
 
 }
 
 //_____________________________________________________________________________
-void WebGui::MakeTargetList(unsigned int connid)
+void WebGui::PollState()
 {
-  LOG(debug) << "make target list";
-  //std::cout << __func__ << std::endl; 
-  decltype(fDeviceState) devStateList;
-  {
-    // copy the current list
-    std::lock_guard<std::mutex> lock{fStateMutex};
-    devStateList = fDeviceState;
-  }
+  auto tPrev = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  while (true) {
 
-  // strip prefix and instance-id to obtain a list of service name
-  auto &targetServices  = fCommandTargetService[connid];
-  auto &targetInstances = fCommandTargetInstance[connid]; 
-  targetServices.clear();
-  targetInstances.clear();
-
-  for (const auto &[serviceName, ss] : devStateList) {
-    targetServices.emplace(serviceName, true);
-    for (const auto &[instName, inst] : ss.instances) {
-     // insert long instance name = "service:id"
-     targetInstances.emplace(serviceName + fSeparator + instName, true); 
+    auto tNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    if ((tNow - tPrev) < fPollIntervalMS) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(fPollIntervalMS - (tNow - tPrev)));
+      continue;
     }
-  }
-
-  {
-    boost::property_tree::ptree obj;
-    obj.put("type", "selected services");
-    boost::property_tree::ptree arr;
-    for (const auto &[name, flag] : targetServices) {
-      boost::property_tree::ptree e;
-      e.put("name", name);
-      e.put("selected", flag);
-      arr.push_back(std::make_pair("", e));
+    tPrev = tNow;
+    
+    std::map<std::string, ServiceState> summaryTable;
+    const auto &stateKeys = daq::service::scan(*fClient, {daq::service::TopPrefix.data(), "*", "*", daq::service::FairMQStatePrefix.data()}, fSeparator);
+    if (stateKeys.empty()) {
+      SendStateSummary(summaryTable);
+      continue;
     }
-    obj.add_child("services", arr);
-    const auto &reply = to_string(obj);
-    //std::cout << __func__ << " " <<  reply << std::endl;
-    Send(connid, reply);
-  }
+    std::vector<sw::redis::OptionalString> stateValues;
+    fClient->mget(stateKeys.begin(), stateKeys.end(), std::back_inserter(stateValues));
 
-  {
-    boost::property_tree::ptree obj;
-    obj.put("type", "selected instances");
-    boost::property_tree::ptree arr;
-    for (const auto &[name, flag] : targetInstances) {
-      boost::property_tree::ptree e;
-      e.put("name", name); // long instance name
-      e.put("selected", flag);
-      arr.push_back(std::make_pair("", e));
+    const auto &updateTimeKeys = daq::service::scan(*fClient, {daq::service::TopPrefix.data(), "*", "*", daq::service::UpdateTimePrefix.data()}, fSeparator);
+    std::vector<sw::redis::OptionalString> updateTimeValues;
+    if (!updateTimeKeys.empty()) {
+      fClient->mget(updateTimeKeys.begin(), updateTimeKeys.end(), std::back_inserter(updateTimeValues));
     }
-    obj.add_child("instances", arr);
-    const auto &reply = to_string(obj);
-    //std::cout << __func__ << " " << reply << std::endl;
-    Send(connid, reply);
-  }
-}
 
-//_____________________________________________________________________________
-void WebGui::ParseDaqState(std::string_view msg) 
-{
-  const auto& obj = to_json(msg);
-  const auto& service = obj.get_optional<std::string>("service");
-  if (!service) {
-    std::cerr << MyClass << ":" << __LINE__ << " " << __func__ << " service name not found" << std::endl;
-    return;
-  }
-  const auto& id = obj.get_optional<std::string>("id");
-  if (!id) {
-    std::cerr << MyClass << ":" << __LINE__ << " " << __func__ << " instance id not found" << std::endl;
-    return;
-  }
+    int i=0;
+    for (const auto &k : stateKeys) {
+      std::vector<std::string> res; 
+      boost::split(res, k, boost::is_any_of(fSeparator));
+      const auto &serviceName = res[1];
+      const auto &instName = res[2];
+      auto &ss = summaryTable[serviceName];
+      auto &inst = ss.instances[instName];
+      if (stateValues[i]) {
+        inst.state = *stateValues[i];
+      } else {
+        inst.state = GetStateName(fair::mq::State::Undefined);
+      }
+      ++i;
+    }
 
-  const auto& state = obj.get_optional<std::string>("state");
-  if (!state) {
-    std::cerr << MyClass << ":" << __LINE__ << " " << __func__ << " state not found" << std::endl;
-    return;
-  }
+    i=0;
+    for (const auto &k : updateTimeKeys) {
+      std::vector<std::string> res; 
+      boost::split(res, k, boost::is_any_of(fSeparator));
+      const auto &serviceName = res[1];
+      const auto &instName = res[2];
+      if (summaryTable.count(serviceName)==0) {
+        ++i;
+        continue;
+      }
+      auto &ss = summaryTable[serviceName];
+      if (ss.instances.count(instName)==0) {
+        ++i;
+        continue;
+      }
+      auto &inst = ss.instances[instName];
+      if (updateTimeValues[i]) {
+        inst.date = *updateTimeValues[i];
+      }
+      ++i;
+    }
 
-  const auto& date = obj.get_optional<std::string>("date");
-  if (!date) {
-    std::cerr << MyClass << ":" << __LINE__ << " " << __func__ << " date not found" << std::endl;
-    return;
-  }
-
-  std::lock_guard<std::mutex> lock{fStateMutex};
-  auto &ss = fDeviceState[*service];
-  if (ss.counts.size() < NStates) {
-    ss.counts.resize(NStates, 0);
-  }
-
-  // id <-- short name
-  auto &inst = ss.instances[*id];
-  if (!inst.state.empty()) {
-    auto oldState = static_cast<int>(fair::mq::GetState(inst.state));
-    --ss.counts[oldState];
-  }
-  auto newState = static_cast<int>(fair::mq::GetState(*state));
-  ++ss.counts[newState];
-  inst.state = *state;
-  inst.date  = *date;
-
-
-  if (ss.date.empty() || (ss.date < *date)) {
-    ss.date = *date;
-  }
-
-  SendServiceStateSummary(*service, ss);
-  SendInstanceState(*service, *id, inst);
-
-  //ShowInstanceState(*service, *id, inst);
+    for (auto &[sname, ss] : summaryTable) {
+      ss.counts.resize(NStates, 0);
+      for (const auto& [instName, inst] : ss.instances) {
+        if (!inst.state.empty()) {
+          auto istate = static_cast<int>(fair::mq::GetState(inst.state));
+          if (istate >= NStates) {
+            LOG(error) << __func__ << " bad state id = " << istate << ": service = " << sname << ", instance = " << instName;
+            continue;
+          }
+          ++ss.counts[istate];
+        }
+        if (!inst.date.empty()) {
+          if (ss.date.empty() || (ss.date < inst.date)) {
+            ss.date = inst.date;
+          }
+        }
+      }
+    }
+    SendStateSummary(summaryTable);
+  } // while ()
 }
 
 //_____________________________________________________________________________
@@ -325,11 +276,11 @@ void WebGui::ProcessData(unsigned int connid,
                          const std::string& arg)
 {
   std::lock_guard<std::mutex> lock{fMutex};
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " connid = " << connid << " : Get msg " << arg << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid << " : arg =  " << arg;
   const auto &obj = to_json(arg);
   const auto& key = obj.get_optional<std::string>("command");
   if (key) {
-    //std::cout << __func__ << " key = " << key.get() << std::endl;
+    LOG(debug) << __func__ << " key (function) = " << key.get();
     fFuncList[key.get()](connid, obj);
   }
 //  for (auto& f : fFuncList) {
@@ -340,37 +291,25 @@ void WebGui::ProcessData(unsigned int connid,
 //_____________________________________________________________________________
 void WebGui::ProcessExpiredKey(std::string_view key) 
 {
-  //std::cout << __func__ << ":" << __LINE__ << " " << key << std::endl;
-  if (key.find("presence")!=std::string_view::npos) {
-    std::vector<std::string> v;
-    boost::split(v, key.data(), boost::is_any_of(":")); // prefix:service:instance:presence
-    //std::cout << __LINE__ << " v.size() = " << v.size() << std::endl;
-    const auto& serviceName = v[1];
-    const auto& instName    = v[2];
-
-    std::lock_guard<std::mutex> lock{fStateMutex};
-    if (fDeviceState.count(serviceName)==0) {
-      std::cerr << __func__ << " unknown service expired : service = " << serviceName << " key = " << key << std::endl;
-      return;
+  LOG(trace) << __func__ << ":" << __LINE__ << " " << key;
+  try {
+    if (key.find("presence")!=std::string_view::npos) {
+      std::vector<std::string> v;
+      boost::split(v, key.data(), boost::is_any_of(":")); // prefix:service:instance:presence
+      LOG(trace) << __LINE__ << " v.size() = " << v.size();
+      const auto& serviceName = v[1];
+      const auto& instName    = v[2];
+      const auto& instIndex   = instName.substr(instName.find("-")+1);  
+      {
+        const auto& key = daq::service::join({daq::service::TopPrefix.data(), daq::service::ServiceInstanceIndexPrefix.data(), serviceName}, fSeparator);
+        fClient->hdel(key, instIndex);
+        LOG(warn) << " delete instance index: key = " << key << ", field = " << instIndex;
+      }
     }
-    auto &ss = fDeviceState[serviceName];
-    if (ss.counts.size() < NStates) {
-      ss.counts.resize(NStates, 0);
-    }
-    if (ss.instances.count(instName)==0) {
-      std::cerr << __func__ << " unknown instance expired : instance = " << instName << " key = " << key << std::endl;
-      return;
-    }
-    auto &inst = ss.instances[instName];
-    auto oldState = static_cast<int>(fair::mq::GetState(inst.state));
-    --ss.counts[oldState];
-    ++ss.counts[static_cast<int>(fair::mq::State::Exiting)];
-    inst.state = "Exiting";
-    inst.date  = date();
-    ss.date    = inst.date;
-
-    SendServiceStateSummary(serviceName, ss);
-    SendInstanceState(serviceName, instName, inst);
+  } catch (const std::exception &e) {
+    LOG(error) << __func__ << " e.what() = " << e.what();
+  } catch (...) {
+    LOG(error) << __func__ << " unknown exception";
   }
 }
 
@@ -380,7 +319,7 @@ void WebGui::ProcessExpiredKey(std::string_view key)
 // read operation on redis and send the value to the web client
 void WebGui::ReadLatestRunNumber(unsigned int connid) 
 {
-  std::cout << __func__ << " connid = " << connid << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid;
   std::string name{"run_info" + fSeparator + "latest_run_number"};
   auto ret = fClient->get(name);
   if (!ret) {
@@ -398,7 +337,7 @@ void WebGui::ReadLatestRunNumber(unsigned int connid)
 // read operation on redis and send the value to the web client
 void WebGui::ReadRunNumber(unsigned int connid) 
 {
-  std::cout << __func__ << " connid = " << connid << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid;
   std::string name{"run_info" + fSeparator + "run_number"};
   auto ret = fClient->get(name);
   if (!ret) {
@@ -415,7 +354,7 @@ void WebGui::ReadRunNumber(unsigned int connid)
 //_____________________________________________________________________________
 void WebGui::RedisGet(unsigned int connid, const boost::property_tree::ptree &arg)
 {
-  std::cout << __func__ << " connid = " << connid << std::endl;
+  LOG(debug) << __func__ << " websocket connid = " << connid;
   const auto &val = arg.get_optional<std::string>("value");
   if (val) {
     if (*val=="run_number") { 
@@ -441,15 +380,10 @@ void WebGui::RedisIncr(unsigned int connid, const boost::property_tree::ptree &a
 void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_tree::ptree& arg)
 {
   const auto& arg_str = to_string(arg);
-  std::cout << __func__ << " arg = " << arg_str << std::endl;
+  LOG(debug) << __func__ << " arg = " << arg_str;
   const auto &val = arg.get_optional<std::string>("value");
-
   if (!val) {
-    std::cerr << " value is missing." << std::endl;
-    return;
-  }
-  if (*val == "get_state") {
-    fClient->publish(fChannelName, {R"({ "command": "get_state" })"});
+    LOG(error) << " value is missing.";
     return;
   }
 
@@ -460,64 +394,22 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
   if (knownCommandList.count(v)>0) {
     LOG(debug) << " connid = " << connid;
 
-    if (fCommandTargetService[connid].count("all")>0) {
+    try {
       boost::property_tree::ptree cmd; 
       cmd.put("command", "change_state");
       cmd.put("value", v);
-      cmd.put("service", "all");
-      cmd.put("instance", "all");
+      cmd.add_child("services", arg.get_child("services"));
+      cmd.add_child("instances", arg.get_child("instances"));
+      //cmd.put("service", "all");
+      //cmd.put("instance", "all");
       const auto& command = to_string(cmd);
-      //std::cout << __func__ << " command = " << command << std::endl;
       LOG(debug) << " 1: command =  " << command;
       fClient->publish(fChannelName, command);
-      return;
+    } catch (const std::exception &e) {
+      LOG(error) << __func__ << " e.what() = " << e.what();
+    } catch (...) {
+      LOG(error) << __func__ << " unknown exception";
     }
-
-    bool isServiceSelected{false};
-    if (fCommandTargetService[connid].size() < fDeviceState.size()) {
-      MakeTargetList(connid);
-    }
-    for (const auto& [serviceName, selected] : fCommandTargetService[connid]) {
-      if (selected) {
-        boost::property_tree::ptree cmd; 
-        cmd.put("command", "change_state");
-        cmd.put("value", v);
-        cmd.put("service", serviceName);
-        cmd.put("instance", "all");
-        const auto& command = to_string(cmd);
-
-        //std::cout << __func__ << " command = " << command << std::endl;
-        LOG(debug) << " 2: command =  " << command;
-        fClient->publish(fChannelName, command);
-        if (!isServiceSelected) {
-          isServiceSelected = true;
-        }
-      }
-    }
-
-    if (isServiceSelected) {
-      LOG(debug) << " service selected";
-      return;
-    }
-    LOG(debug) << " service not selected";
-    
-    for (const auto& [longName, selected] : fCommandTargetInstance[connid]) {
-      if (selected) {
-        const auto& pos = longName.find(fSeparator);
-        const auto& serviceName = longName.substr(0, pos);
-        const auto& shortName = longName.substr(pos+1);
-        boost::property_tree::ptree cmd; 
-        cmd.put("command", "change_state");
-        cmd.put("value", v);
-        cmd.put("service", serviceName);
-        cmd.put("instance", shortName);
-        const auto& command = to_string(cmd);
-        //std::cout << __func__ << " command = " << command << std::endl;
-        LOG(debug) << " 3: command = " << command;
-        fClient->publish(fChannelName, command);
-      }
-    }
-        
   }
 
 }
@@ -526,7 +418,7 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
 //_____________________________________________________________________________
 void WebGui::RedisSet(unsigned int connid, const boost::property_tree::ptree &arg)
 {
-  std::cout <<  __func__ << " " << connid << std::endl;
+  LOG(debug) <<  __func__ << " " << connid;
   const auto &name = arg.get_optional<std::string>("name");
   if (name) {
     if (*name=="run_number") {      
@@ -538,11 +430,8 @@ void WebGui::RedisSet(unsigned int connid, const boost::property_tree::ptree &ar
 //_____________________________________________________________________________
 void WebGui::RemoveWebSocketId(unsigned int connid)
 {
-  std::cout <<  __func__ << " " << connid << std::endl;
+  LOG(warn) <<  __func__ << " websocket connid = " << connid;
   fWebSocketIdList.remove_if([connid](const auto &p) { return (connid==p.first); });
-  fCommandTargetService.erase(connid);
-  fCommandTargetInstance.erase(connid);
-
 }
 
 //_____________________________________________________________________________
@@ -552,39 +441,85 @@ void WebGui::SaveRDB(const std::string &runNumber)
 }
 
 //_____________________________________________________________________________
-void WebGui::SendInstanceState(std::string_view service, std::string_view instName, const InstanceState& inst)
+void WebGui::SendStateSummary(const std::map<std::string, ServiceState> & summaryTable)
 {
-  boost::property_tree::ptree obj;
-  obj.put("type", "instance-state");
-  obj.put("service", service.data());
-  obj.put("instance", instName.data()); // short name
-  obj.put("state", inst.state);
-  obj.put("date", inst.date);
-  const auto& str = to_string(obj);
-  //std::cout << " obj (instance state) = " << str << std::endl;
-  Send(0, str);
-}
-
-//_____________________________________________________________________________
-void WebGui::SendServiceStateSummary(std::string_view service, const ServiceState& s)
-{
-  boost::property_tree::ptree obj;
-  obj.put("type", "state-summary");
-  obj.put("service", service.data()); 
-  obj.put("date", s.date);
-  obj.put("n_instances", s.instances.size());
-  boost::property_tree::ptree countList;
-  for (auto i=0; i<NStates; ++i) {
-    boost::property_tree::ptree cnt;
-    cnt.put("state-id", i);
-    cnt.put("name", fair::mq::GetStateName(static_cast<fair::mq::State>(i)));
-    cnt.put("value", s.counts[i]);
-    countList.push_back(std::make_pair("", cnt));
+  static std::map<std::string, ServiceState> prevTable; 
+  bool serviceListChanged = false;
+  bool instanceListChanged = false;
+  if (prevTable.size() != summaryTable.size()) {
+    serviceListChanged = true;
+    instanceListChanged = true;
+  } else {
+    for (const auto& [k, v] : summaryTable) {
+      if (prevTable.count(k)==0) {
+        serviceListChanged = true;
+        instanceListChanged = true;
+        break;
+      }
+    }
+    if (!serviceListChanged) {
+      for (const auto& [k, v] : summaryTable) {
+        const auto& srv = prevTable[k];
+        if (srv.instances.size()!=v.instances.size()) {
+          instanceListChanged = true;
+          break;
+        }
+        for (const auto &[instK, instV] : v.instances) {
+          if (srv.instances.count(instK)==0) {
+            instanceListChanged = true;
+            break;
+          }
+        }
+        if (instanceListChanged) {
+          break;
+        }
+      }
+    }
   }
-  obj.add_child("counts", countList);
-  const auto& str = to_string(obj);
-  //std::cout << " obj (state-summary) = " << str << std::endl;
-  Send(0, str);
+  prevTable = summaryTable;
+  try {
+    boost::property_tree::ptree obj;
+    obj.put("type", "state-summary-table");
+    obj.put("service_list_changed", serviceListChanged);
+    obj.put("instance_list_changed", instanceListChanged);
+    boost::property_tree::ptree services; 
+    for (const auto& [service, summary]: summaryTable) {
+      boost::property_tree::ptree s;
+      s.put("service", service);
+      s.put("date", summary.date);
+      s.put("n_instances", summary.instances.size());
+      boost::property_tree::ptree countList;
+      for (auto i=0; i<NStates; ++i) {
+        boost::property_tree::ptree cnt;
+        cnt.put("state-id", i);
+        cnt.put("name", fair::mq::GetStateName(static_cast<fair::mq::State>(i)));
+        cnt.put("value", summary.counts[i]);
+        countList.push_back(std::make_pair("", cnt));
+      }
+      s.add_child("counts", countList);
+
+      boost::property_tree::ptree instList;
+      for (const auto& [instName, istate] : summary.instances) {
+        boost::property_tree::ptree inst;
+        inst.put("service", service);
+        inst.put("instance", instName);
+        inst.put("state", istate.state);
+        inst.put("date", istate.date);
+        instList.push_back(std::make_pair("", inst));
+      }
+      s.add_child("instances", instList);
+
+      services.push_back(std::make_pair("", s));
+    }
+    obj.add_child("services", services);
+    const auto& str = to_string(obj);
+    LOG(debug) << __func__ << " obj(state-summary-table) = " << str;
+    Send(0, str);
+  } catch (const std::exception &e) {
+    LOG(error) << __func__ << " caught exception: what() = " << e.what();
+  } catch (...) {
+    LOG(error) << __func__ << " unknown exception";
+  }
 }
 
 //_____________________________________________________________________________
@@ -595,132 +530,8 @@ void WebGui::SendWebSocketIdList()
   for (const auto &[id, t] : fWebSocketIdList) {
     msg += " " + std::to_string(id) + " : " + t + "<br>";
   }
-  //std::cout << __FILE__ << ":" << __LINE__ << " " << __func__ << " " << msg << std::endl;
+  LOG(debug) << __func__ << " " << msg;
   Send(0, msg.data());
-}
-
-//_____________________________________________________________________________
-// keep a command channel in a local variable
-void WebGui::SetCommandTargetInstance(unsigned int connid, const boost::property_tree::ptree& arg)
-{
-  //std::cout << __func__ << " connid = " << connid << std::endl;
-  const auto& items = arg.get_child("items");
-  //std::cout << __func__ << " items = " << to_string(items) << std::endl;
-
-  auto& services = fCommandTargetService[connid];
-  auto& instances = fCommandTargetInstance[connid];
-  if (services.size() < fDeviceState.size()) {
-    MakeTargetList(connid);
-  }
-  for (auto &[k, v] : instances) {
-    v = false;
-  }
-
-  bool isAll{false}; 
-
-  for (const auto& item : items) {
-    const auto x = item.second.get_value<std::string>();
-    //std::cout << __func__ << ":" << __LINE__ << " x = " << x << std::endl;
-    if (x=="all") {
-      isAll = true;
-      break;
-    } 
-    instances[x] = true;
-  }
-
-  if (!isAll) {
-    for (auto &[k, v] : services) {
-      v = false;
-    }
-  }
-
-  //std::cout << __func__ << " selected services\n";
-  //for (const auto &[k, v] : services) {
-  //  if (v) {
-  //    std::cout << " " << k << "\n";
-  //  }   
-  //}
-  //std::cout << " selected instances\n";
-  //for (const auto &[k, v] : instances) {
-  //  if (v) {
-  //    std::cout << " " << k << "\n";
-  //  }
-  //}
-  //std::cout.flush();
-}
-
-//_____________________________________________________________________________
-// keep a command channel in a local variable and send selected instances
-void WebGui::SetCommandTargetService(unsigned int connid, const boost::property_tree::ptree& arg)
-{
-  //std::cout << __func__ << " connid = " << connid << std::endl; 
-
-  const auto& items = arg.get_child("items");
-  //std::cout << __func__ << " items = " << to_string(items) << std::endl;
-
-  auto &services = fCommandTargetService[connid];
-  if (services.size() < fDeviceState.size()) {
-    MakeTargetList(connid);
-  }
-  auto &instances = fCommandTargetInstance[connid];
-  for (auto &[k, v] : services) {
-    v = false;
-  }
-  bool isAll{false};
-  for (auto& item : items) {
-    std::string x = item.second.get_value<std::string>();
-    //std::cout << __func__ << ":" << __LINE__ << " x = " << x << "\n";
-    if (x=="all") {
-      isAll = true;
-      services["all"] = true;
-      break;
-    } 
-    services[x] = true;
-  }
-  //std::cout.flush();
-
-  std::list<std::string> candidates;
-  for (auto &[svcName, svcSelected] : services) {
-    if (isAll) {
-      svcSelected = true;
-    }
-    if (svcSelected) {
-      for (auto &[instName, instSelected] : instances) {
-        // instName = service:id (long style)
-        if (instName.find(svcName)==0) {
-          instSelected = true;
-          candidates.push_back(instName);
-        }
-      }
-    }
-  }
-
-  candidates.sort();
-  candidates.unique();
-
-  //std::cout << __func__ << " instances of selected services\n";
-  //for (const auto &x : candidates) {
-  //  std::cout << " " << x << "\n";
-  //}
-  //std::cout.flush();
-  //candidates.push_front("all");
-
-  {
-    boost::property_tree::ptree obj;
-    obj.put("type", "selected instances");
-    boost::property_tree::ptree arr;
-    for (const auto &name : candidates) {
-      boost::property_tree::ptree e;
-      e.put("name", name); // long instance name
-      e.put("selected", true);
-      arr.push_back(std::make_pair("", e));
-    }
-    obj.add_child("instances", arr);
-    const auto &reply = to_string(obj);
-    //std::cout << __func__ << " " << reply << std::endl;
-    Send(connid, reply);
-  }
-
 }
 
 //_____________________________________________________________________________
@@ -735,12 +546,8 @@ void WebGui::SubscribeToRedisPubSub()
       const auto& obj = to_json(msg) ;
       const auto& cmdValue = obj. template get_optional<std::string>("value");
       if (!cmdValue) {
-        std::cerr << MyClass << ":" << __LINE__ << " on_message: missing command value" << std::endl;
+        LOG(error) << MyClass << ":" << __LINE__ << " on_message: missing command value";
         return; 
-      }
-      if (*cmdValue=="daq-state") {
-        std::thread t([this, msg = std::move(msg)]() { ParseDaqState(msg); }); 
-        t.detach();
       }
     } else if (channel == fRedisKeyEventChannelName) {
       std::cout << MyClass << " on_message(): expired key = " << msg << std::endl;
@@ -748,6 +555,9 @@ void WebGui::SubscribeToRedisPubSub()
       t.detach();
     }
   });
+
+  LOG(info) << "subscribe to redis pub/sub channel for DAQ state transition command: " << daq::service::StateChannelName.data();
+  LOG(info) << "subscribe to redis key-event : " << fRedisKeyEventChannelName;
   sub.subscribe({std::string(daq::service::StateChannelName.data()), fRedisKeyEventChannelName}); 
 
   while (true) {
@@ -756,17 +566,17 @@ void WebGui::SubscribeToRedisPubSub()
     } catch (const sw::redis::TimeoutError &e) {
       // try again.
     } catch (const sw::redis::Error &e) {
-      std::cerr << MyClass << "::" << __func__ << ": error in consume(): " << e.what() << std::endl;
+      LOG(error) << MyClass << "::" << __func__ << ": error in consume(): " << e.what();
       break;
     } catch (const std::exception& e) {
-      std::cerr << MyClass << "::" << __func__ << ": error in consume(): " << e.what() << std::endl;
+      LOG(error) << MyClass << "::" << __func__ << ": error in consume(): " << e.what();
       break;
     } catch (...) {
-      std::cerr << MyClass << "::" << __func__ << ": unknown exception" << std::endl;
+      LOG(error) << MyClass << "::" << __func__ << ": unknown exception";
       break;
     }
   }
-  std::cerr << MyClass << "::" << __func__ << " exit" << std::endl;
+  LOG(error) << MyClass << "::" << __func__ << " exit";
 }
 
 //_____________________________________________________________________________
@@ -776,7 +586,7 @@ void WebGui::WriteRunNumber(unsigned int connid, const boost::property_tree::ptr
   //std::cout << __func__ << " connid = " << connid << ", arg = " << arg << std::endl;
   auto val = arg.get_optional<std::string>("value");
   if (!val) {
-    std::cerr << MyClass << " " << __func__ << " parse error " << std::endl;
+    LOG(error) << MyClass << " " << __func__ << " parse error ";
     return;
   }
   std::string key{"run_info" + fSeparator + "run_number"};

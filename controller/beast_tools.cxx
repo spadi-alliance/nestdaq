@@ -1,11 +1,14 @@
+#include <iostream>
+
+#include <fairmq/FairMQLogger.h>
+
 #include "controller/beast_tools.h"
 
-#include <iostream>
 
 //_____________________________________________________________________________
 void fail(beast::error_code ec, char const* what)
 {
-    std::cerr << what << ": " << ec.message() << "\n";
+    LOG(warn) << "boost::beast fail(): what = " << what << ": ec.message() = " << ec.message();
 }
 
 //_____________________________________________________________________________
