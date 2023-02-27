@@ -36,6 +36,7 @@ bpo::options_description MakeOption()
   bpo::options_description options("options");
   bpo::options_description wsOptions("websocket handler options");
   bpo::options_description redisOptions("redis options");
+  bpo::options_description logOptions("log options");
   wsOptions.add_options()
   // 
   // 
@@ -57,7 +58,9 @@ bpo::options_description MakeOption()
   //
   ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond")
   //
-  ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format")
+  ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format");
+
+  logOptions.add_options()
   //
   ("log-to-file", bpo::value<std::string>()->default_value(""), "FairLogger Log output to a file")
   //
@@ -75,7 +78,8 @@ bpo::options_description MakeOption()
   ("help,h", "print this help");
 
   options.add(wsOptions)
-         .add(redisOptions);
+         .add(redisOptions)
+         .add(logOptions);
   return options;
 }
 
