@@ -13,7 +13,8 @@ A simple html (and JavaScript) used by `daq-webctl`.
 
 ```
 
-After starting `daq-webctl`, open the URL `http://localhost:8080/daq-webctl.html` in a web browser.   
+After starting `daq-webctl`, open the URL `http://localhost:8080/daq-webctl.html` or `http://localhost:8080/`in a web browser.   
+In the latter case (the path to the HTML file is omitted), the symbolic link to the default file `daq-webctl.html` is used. 
 
 Note:
 - Run number must be set before entering to the Running state. 
