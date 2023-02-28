@@ -1011,13 +1011,13 @@ void Plugin::SubscribeToDaqCommand()
         } else {
           ChangeDeviceStateByMultiCommand(*val);
         }
-      }
-
-      // any state Exiting by exiting SubscribeToDaqCommand() and calling RunShutdownSequence() in the state control thread 
-      if ((*val==daq::command::Exit) || 
-          (*val==daq::command::Quit) || 
-          (*val==fairmq::command::End)) {
-        fPluginShutdownRequested = true;
+       
+        // any state Exiting by exiting SubscribeToDaqCommand() and calling RunShutdownSequence() in the state control thread 
+        if ((*val==daq::command::Exit) || 
+            (*val==daq::command::Quit) || 
+            (*val==fairmq::command::End)) {
+          fPluginShutdownRequested = true;
+        }
       }
     }
   });
