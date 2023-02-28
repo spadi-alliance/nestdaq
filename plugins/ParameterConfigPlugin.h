@@ -62,12 +62,12 @@ private:
         || (value=="true") || (value=="TRUE") || (value=="True") //
         || (value=="on")  || (value=="ON")  || (value=="On") //
         || (value=="yes") || (value=="YES") || (value=="Yes"); //
+    } else if constexpr (std::is_floating_point_v<T>) {
+      v = static_cast<T>(std::stod(value.data()));
     } else if constexpr (std::is_signed_v<T>) {
       v = static_cast<T>(std::stoll(value.data()));
     } else if constexpr (std::is_unsigned_v<T>) {
       v = static_cast<T>(std::stoull(value.data())); 
-    } else if constexpr (std::is_floating_point_v<T>) {
-      v = static_cast<T>(std::stod(value.data()));
     } else {
       LOG(error) << "unknown  type for parameter: field = " << name << " value = " << value;
       return;
@@ -82,7 +82,7 @@ private:
       }
     }
     if (isNewValue) {
-      LOG(info) << " new parameter: field = " << name << " value = " << value;
+      LOG(info) << " new parameter: field = " << name << ", value = " << value;
       SetProperty<T>(name.data(), v);
     }
   }
