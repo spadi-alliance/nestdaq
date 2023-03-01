@@ -25,6 +25,10 @@ const std::unordered_set<std::string_view> reservedOptionsString
  "session", //
  "config-key", //
  "mq-config", //
+ "severity", //
+ "file-severity", //
+ "verbosity", //
+ "log-to-file", //
 };
 
 const std::unordered_set<std::string_view> reservedOptionsInt
@@ -43,6 +47,7 @@ const std::unordered_set<std::string_view> reservedOptionsBool
 const std::unordered_set<std::string_view> reservedOptionsSize
 {"shm-segment-size", //
   "ofi-size-hint", //
+  "color", //
 };
 
 const std::unordered_set<std::string_view> reservedOptionsUint16
