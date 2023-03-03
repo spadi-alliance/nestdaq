@@ -12,22 +12,22 @@ using strand_t = net::strand<net::io_context::executor_type>;
 
 class Timer {
 public:
-  Timer() = default;
-  ~Timer(); 
+    Timer() = default;
+    ~Timer();
 
-  void Start(const std::shared_ptr<net::io_context> &ctx, 
- //           const std::shared_ptr<strand_t> &strand, 
-            unsigned int timeoutMS,
-            std::function<bool(const std::error_code &)> f);
+    void Start(const std::shared_ptr<net::io_context> &ctx,
+//           const std::shared_ptr<strand_t> &strand,
+               unsigned int timeoutMS,
+               std::function<bool(const std::error_code &)> f);
 
 private:
-  void Start();
+    void Start();
 
-  std::shared_ptr<net::io_context> fContext;
+    std::shared_ptr<net::io_context> fContext;
 //  std::shared_ptr<strand_t> fStrand;
-  std::unique_ptr<net::steady_timer> fTimer;
-  unsigned int fTimeoutMS{0};
-  std::function<bool(const std::error_code &)> fHandle;
+    std::unique_ptr<net::steady_timer> fTimer;
+    unsigned int fTimeoutMS{0};
+    std::function<bool(const std::error_code &)> fHandle;
 
 };
 

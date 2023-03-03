@@ -15,31 +15,31 @@ namespace daq::service {
 //_____________________________________________________________________________
 inline std::string join(const std::vector<std::string> &v, std::string_view separator)
 {
-  return boost::join(v, separator.data());
+    return boost::join(v, separator.data());
 }
 
 //_____________________________________________________________________________
-inline std::unordered_set<std::string> scan(sw::redis::Redis &r,  
-                                            std::string_view pattern, 
-                                            long long cursor=0LL)
+inline std::unordered_set<std::string> scan(sw::redis::Redis &r,
+        std::string_view pattern,
+        long long cursor=0LL)
 {
-  std::unordered_set<std::string> keys;
-  while (true) {
-    cursor = r.scan(cursor, pattern, std::inserter(keys, keys.begin()));
-    if (cursor==0) {
-      break;
+    std::unordered_set<std::string> keys;
+    while (true) {
+        cursor = r.scan(cursor, pattern, std::inserter(keys, keys.begin()));
+        if (cursor==0) {
+            break;
+        }
     }
-  }
-  return keys;
+    return keys;
 }
 
 //_____________________________________________________________________________
-inline std::unordered_set<std::string> scan(sw::redis::Redis &r, 
-                                            const std::vector<std::string>& v,  
-                                            std::string_view separator, 
-                                            long long cursor=0LL)
+inline std::unordered_set<std::string> scan(sw::redis::Redis &r,
+        const std::vector<std::string>& v,
+        std::string_view separator,
+        long long cursor=0LL)
 {
-  return scan(r, boost::join(v, separator.data()), cursor);
+    return scan(r, boost::join(v, separator.data()), cursor);
 }
 
 } // namespace daq::service

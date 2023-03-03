@@ -35,25 +35,25 @@ static constexpr std::string_view StateChannelName{"daqstate"}; // daq command p
 }
 
 namespace fairmq::command {
-  static constexpr std::string_view Bind{"BIND"};
-  static constexpr std::string_view CompleteInit{"COMPLETE INIT"};
-  static constexpr std::string_view Connect{"CONNECT"};
-  static constexpr std::string_view End{"END"};
-  static constexpr std::string_view InitDevice{"INIT DEVICE"};
-  static constexpr std::string_view InitTask{"INIT TASK"};
-  static constexpr std::string_view ResetDevice{"RESET DEVICE"};
-  static constexpr std::string_view ResetTask{"RESET TASK"};
-  static constexpr std::string_view Run{"RUN"};
-  static constexpr std::string_view Stop{"STOP"};
+static constexpr std::string_view Bind{"BIND"};
+static constexpr std::string_view CompleteInit{"COMPLETE INIT"};
+static constexpr std::string_view Connect{"CONNECT"};
+static constexpr std::string_view End{"END"};
+static constexpr std::string_view InitDevice{"INIT DEVICE"};
+static constexpr std::string_view InitTask{"INIT TASK"};
+static constexpr std::string_view ResetDevice{"RESET DEVICE"};
+static constexpr std::string_view ResetTask{"RESET TASK"};
+static constexpr std::string_view Run{"RUN"};
+static constexpr std::string_view Stop{"STOP"};
 
 }
 
 namespace daq::command {
-  static constexpr std::string_view Channel{"daqctl"};
-  static constexpr std::string_view Exit{"exit"};
-  static constexpr std::string_view Quit{"quit"};
-  static constexpr std::string_view Reset{"reset"};
-  static constexpr std::string_view Start{"start"};
+static constexpr std::string_view Channel{"daqctl"};
+static constexpr std::string_view Exit{"exit"};
+static constexpr std::string_view Quit{"quit"};
+static constexpr std::string_view Reset{"reset"};
+static constexpr std::string_view Start{"start"};
 }
 
 #endif

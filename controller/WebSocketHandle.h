@@ -8,7 +8,7 @@
 class websocket_session;
 
 void OnClose(unsigned int id);
-void OnConnect(const std::shared_ptr<websocket_session> &session); 
+void OnConnect(const std::shared_ptr<websocket_session> &session);
 void OnRead(unsigned int id, const std::string& message);
 void OnRead(unsigned int id, const std::vector<char>& data);
 void Write(unsigned int id, const std::string& message);

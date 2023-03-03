@@ -8,26 +8,26 @@
 #include <thread>
 #include <vector>
 
-#include "controller/beast_tools.h" 
+#include "controller/beast_tools.h"
 
 class listener;
 
-class HttpWebSocketServer 
+class HttpWebSocketServer
 {
 public:
-  explicit HttpWebSocketServer(int nThreads);
-  HttpWebSocketServer(const HttpWebSocketServer&) = delete;
-  HttpWebSocketServer& operator=(const HttpWebSocketServer&) = delete;
-  ~HttpWebSocketServer();
+    explicit HttpWebSocketServer(int nThreads);
+    HttpWebSocketServer(const HttpWebSocketServer&) = delete;
+    HttpWebSocketServer& operator=(const HttpWebSocketServer&) = delete;
+    ~HttpWebSocketServer();
 
-  void Run(std::string_view scheme, std::string_view address, std::string_view port, std::string_view doc_root);
+    void Run(std::string_view scheme, std::string_view address, std::string_view port, std::string_view doc_root);
 
 private:
-  std::shared_ptr<net::io_context> fContext; 
-  int fNThreads{0};
-  std::shared_ptr<listener> fListener; 
-  std::shared_ptr<net::signal_set> fSignals;
-  std::vector<std::thread> fThreads;
+    std::shared_ptr<net::io_context> fContext;
+    int fNThreads{0};
+    std::shared_ptr<listener> fListener;
+    std::shared_ptr<net::signal_set> fSignals;
+    std::vector<std::thread> fThreads;
 };
 
 #endif
