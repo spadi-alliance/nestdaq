@@ -9,7 +9,7 @@
 
 std::string date();
 std::string GetIPv4FromHostname(const std::string& name);
-int ParseCommandLine(int argc, char* argv[], 
+int ParseCommandLine(int argc, char* argv[],
                      const boost::program_options::options_description& options,
                      boost::program_options::variables_map& vm);
 
