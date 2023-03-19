@@ -18,7 +18,10 @@
         <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis">
         <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box">
       </form>
-      <div id="latest_run_number"></div>
+      <div id="next_run_number">Next : </div>
+      <div id="latest_run_number">Latest : </div>
+      <div id="latest_run_start_time">Start : </div>
+      <div id="latest_run_stop_time">Stop : </div>
    </p>
    
     
@@ -27,16 +30,17 @@
     <h3>Idle &RightTriangle; Running</h3>
     <p>
       Idle &RightTriangle; 
-      <!-- 
       <input type="button" onclick="redis_publish('INIT DEVICE')"   value="Init Device" data-toggle="tool=tip" title="changes state from Idle to Initialized"> 
       &RightTriangle; Initializing Device &RightTriangle; Initialized &RightTriangle; 
       <input type="button" onclick="redis_publish('BIND')"          value="Bind" data-toggle="tool-tip" title="changes state from Idle/Initialized to Bound"> 
       &RightTriangle; Binding &RightTriangle; Bound &RightTriangle; 
       <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Socket" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
       &RightTriangle; Connecting &RightTriangle; Device Ready &RightTriangle;
-      -->
+     
+      <!-- 
       <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Connection" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
       Device Ready &RightTriangle;
+      -->
       <input type="button" onclick="redis_publish('INIT TASK')"     value="Init Task" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound/DeviceReady to Ready"> 
       &RightTriangle; <!-- Initializing Task &RightTriangle; --> Ready &RightTriangle;
       <input type="button" onclick="redis_publish('RUN')"           value="Run" data-toggle="tool-tip" title="changes any state to Running"> 
@@ -246,15 +250,19 @@
 
       hcol_name               .innerHTML = "Service";
       hcol_n_instances        .innerHTML = "N"; 
-      hcol_undefined          .innerHTML = "Undefined";
+      //hcol_undefined          .innerHTML = "Undefined";
+      hcol_undefined          .innerHTML = "Undef.";
       hcol_ok                 .innerHTML = "Ok";
       hcol_error              .innerHTML = "Error";
       hcol_idle               .innerHTML = "Idle"; 
       hcol_initializing_device.innerHTML = "Init-Device"; //"InitializingDevice"; 
-      hcol_initialized        .innerHTML = "Initialized"; 
-      hcol_binding            .innerHTML = "Binding"; 
+      //hcol_initialized        .innerHTML = "Initialized"; 
+      hcol_initialized        .innerHTML = "Init."; 
+      //hcol_binding            .innerHTML = "Binding"; 
+      hcol_binding            .innerHTML = "Bind."; 
       hcol_bound              .innerHTML = "Bound"; 
-      hcol_connecting         .innerHTML = "Connecting"; 
+      //hcol_connecting         .innerHTML = "Connecting"; 
+      hcol_connecting         .innerHTML = "Conn."; 
       hcol_device_ready       .innerHTML = "Device-Ready"; 
       hcol_initializing_task  .innerHTML = "Init-Task"; //"InitializingTask"; 
       hcol_ready              .innerHTML = "Ready"; 
@@ -300,6 +308,17 @@
     
     // --------------------------------------------------
     function redis_publish(arg) {
+      if (arg == "RUN") {
+        d = new Date();
+        val = document.getElementById('latest_run_start_time');
+        val.innerHTML = 'Start : ' + d.toString();
+        val.style.color="black";
+        document.getElementById('latest_run_stop_time').innerHTML = 'Stop :  ';
+      } else if (arg == "STOP") {
+        d = new Date();
+        document.getElementById('latest_run_start_time').style.color="grey";
+        document.getElementById('latest_run_stop_time').innerHTML = 'Stop :  ' + d.toString();
+      }
       //console.log(this.constructor.name + ': arg = ' + arg);
       const serviceOptions  = document.getElementById('serviceSelector'); 
       const srv = [];
@@ -341,6 +360,7 @@
     function SetRunNumber(arg) {
       console.log('SetRunNumber: ', arg);
       document.getElementById("run_number").value = arg; 
+      document.getElementById("next_run_number").innerHTML = 'Next : ' + arg; 
     }
 
     // --------------------------------------------------
@@ -358,6 +378,7 @@
       //  return false;
       //}
       SendMessage('{ "command": "redis-set", "name": "' + arg + '", "value": "' + document.getElementById(arg).value + '" }');
+      redis_get('run_number');
       return false;
     }
     
