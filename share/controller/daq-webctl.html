@@ -30,17 +30,18 @@
     <h3>Idle &RightTriangle; Running</h3>
     <p>
       Idle &RightTriangle; 
+      <!--
       <input type="button" onclick="redis_publish('INIT DEVICE')"   value="Init Device" data-toggle="tool=tip" title="changes state from Idle to Initialized"> 
       &RightTriangle; Initializing Device &RightTriangle; Initialized &RightTriangle; 
       <input type="button" onclick="redis_publish('BIND')"          value="Bind" data-toggle="tool-tip" title="changes state from Idle/Initialized to Bound"> 
       &RightTriangle; Binding &RightTriangle; Bound &RightTriangle; 
       <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Socket" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
       &RightTriangle; Connecting &RightTriangle; Device Ready &RightTriangle;
-     
-      <!-- 
+      -->
+
       <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Connection" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
       Device Ready &RightTriangle;
-      -->
+
       <input type="button" onclick="redis_publish('INIT TASK')"     value="Init Task" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound/DeviceReady to Ready"> 
       &RightTriangle; <!-- Initializing Task &RightTriangle; --> Ready &RightTriangle;
       <input type="button" onclick="redis_publish('RUN')"           value="Run" data-toggle="tool-tip" title="changes any state to Running"> 
