@@ -5,8 +5,9 @@
 #include <unordered_set>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/property_tree/json_parser.hpp>
 #include <boost/optional.hpp>
+#include <boost/process.hpp>
+#include <boost/property_tree/json_parser.hpp>
 
 #include <sw/redis++/redis++.h>
 
@@ -415,8 +416,23 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
             //cmd.put("service", "all");
             //cmd.put("instance", "all");
             const auto& command = to_string(cmd);
-            LOG(debug) << " 1: command =  " << command;
-            fClient->publish(fChannelName, command);
+
+            // use boost::iequals for case insensitive compare
+            if (boost::iequals(v, fairmq::command::Run)) {
+                LOG(debug) << " pre-run = " << fPreRunCommand;
+                boost::process::system(fPreRunCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+                fClient->publish(fChannelName, command);
+                LOG(debug) << " post-run = " << fPostRunCommand;
+                boost::process::system(fPostRunCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+            } else if (boost::iequals(v,  fairmq::command::Stop)) {
+                LOG(debug) << " pre-stop = " << fPreStopCommand;
+                boost::process::system(fPreStopCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+                fClient->publish(fChannelName, command);
+                LOG(debug) << " post-stop = " << fPostStopCommand;
+                boost::process::system(fPostStopCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+            } else {
+                fClient->publish(fChannelName, command);
+            }
         } catch (const std::exception &e) {
             LOG(error) << __func__ << " e.what() = " << e.what();
         } catch (...) {
