@@ -32,6 +32,9 @@ void HttpWebSocketServer::Run(std::string_view scheme, std::string_view address,
 
     // Create and launch a listening port
     fListener = std::make_shared<listener>(fContext, tcp::endpoint(ipAddr, std::stoi(port.data())), docRoot);
+    if (fListener->get_status()!=listener::StatusGood) {
+        return;
+    }
     fListener->run();
 
     // Capture SIGINT and SIGTERM to perform a clean shutdown
