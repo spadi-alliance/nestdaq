@@ -44,7 +44,15 @@ bpo::options_description MakeOption()
     //
     ("threads", bpo::value<unsigned int>()->default_value(1), "number of threads for http server")
     //
-    ("doc-root", bpo::value<std::string>()->default_value(std::string(DefaultDocRootPath.data())), "Directory of the document root, which is the starting point when looking for html");
+    ("doc-root", bpo::value<std::string>()->default_value(std::string(DefaultDocRootPath.data())), "Directory of the document root, which is the starting point when looking for html")
+    //
+    ("pre-run", bpo::value<std::string>()->default_value("echo \"pre-run command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing RUN command")
+    //
+    ("post-run", bpo::value<std::string>()->default_value("echo \"post-run command\""), "Path to a script file (starting with shebang) or a comamnd line to execute after publishing RUN command")
+    //
+    ("pre-stop", bpo::value<std::string>()->default_value("echo \"pre-stop command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing STOP command")
+    //
+    ("post-stop", bpo::value<std::string>()->default_value("echo \"post-stop command\""), "Path to the script file (starting with shebang) or a comamnd line to execute after publishing STOP command");
 
     redisOptions.add_options()
     //
@@ -180,6 +188,10 @@ int main(int argc, char* argv[])
         LOG(info) << " Termination is requested.";
     });
 
+    daqControl->SetPreRunCommand(vm["pre-run"].as<std::string>());
+    daqControl->SetPostRunCommand(vm["post-run"].as<std::string>());
+    daqControl->SetPreStopCommand(vm["pre-stop"].as<std::string>());
+    daqControl->SetPostStopCommand(vm["post-stop"].as<std::string>());
 
     // ============================================
     // http server setup

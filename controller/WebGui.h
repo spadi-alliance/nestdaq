@@ -95,6 +95,18 @@ public:
     void SetPollIntervalMS(uint64_t t) {
         fPollIntervalMS = t;
     }
+    void SetPostRunCommand(std::string_view value) {
+        fPostRunCommand = value.data();
+    }
+    void SetPostStopCommand(std::string_view value) {
+        fPostStopCommand = value.data();
+    }
+    void SetPreRunCommand(std::string_view value) {
+        fPreRunCommand = value.data();
+    }
+    void SetPreStopCommand(std::string_view value) {
+        fPreStopCommand = value.data();
+    }
     void SetSaveCommand(std::string_view value) {
         fSaveCommand = value.data();
     }
@@ -135,6 +147,11 @@ private:
 
     std::function<void (unsigned int, const std::string&)> fSend;
     std::function<void (void)> fTerminate;
+
+    std::string fPreRunCommand;
+    std::string fPostRunCommand;
+    std::string fPreStopCommand;
+    std::string fPostStopCommand;
 
     // for redis client
     std::string fSeparator;
