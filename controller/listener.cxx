@@ -12,11 +12,13 @@ listener::listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint en
     , doc_root_(doc_root)
 {
     beast::error_code ec;
+    status_ = StatusGood;
 
     // Open the acceptor
     acceptor_.open(endpoint.protocol(), ec);
     if(ec) {
         fail(ec, "listener open");
+        status_ = ec.message();
         return;
     }
 
@@ -24,6 +26,7 @@ listener::listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint en
     acceptor_.set_option(net::socket_base::reuse_address(true), ec);
     if(ec) {
         fail(ec, "listener set_option");
+        status_ = ec.message();
         return;
     }
 
@@ -31,6 +34,7 @@ listener::listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint en
     acceptor_.bind(endpoint, ec);
     if(ec) {
         fail(ec, "listener bind");
+        status_ = ec.message();
         return;
     }
 
@@ -38,6 +42,7 @@ listener::listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint en
     acceptor_.listen(net::socket_base::max_listen_connections, ec);
     if(ec) {
         fail(ec, "listener listen");
+        status_ = ec.message();
         return;
     }
 }
