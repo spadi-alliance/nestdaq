@@ -17,6 +17,8 @@
         <input type="submit" value="Send">
         <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis">
         <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box">
+        <input type="checkbox" id="run-number-auto-increment-checkbox" name="run-number-auto-increment-checkbox" checked>
+        <label for="run-number-auto-increment-checkbox">Auto increment at RUN-Stop</label>
       </form>
       <div id="next_run_number">Next : </div>
       <div id="latest_run_number">Latest : </div>
@@ -319,6 +321,10 @@
         d = new Date();
         document.getElementById('latest_run_start_time').style.color="grey";
         document.getElementById('latest_run_stop_time').innerHTML = 'Stop :  ' + d.toString();
+        autoIncr = document.getElementById('run-number-auto-increment-checkbox');
+        if (autoIncr.checked) {
+          redis_incr('run_number');
+        }
       }
       //console.log(this.constructor.name + ': arg = ' + arg);
       const serviceOptions  = document.getElementById('serviceSelector'); 
