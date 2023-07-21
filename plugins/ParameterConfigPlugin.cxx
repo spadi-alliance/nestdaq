@@ -157,9 +157,11 @@ void ParameterConfigPlugin::ReadHash(const std::string& name)
 {
     std::unordered_map<std::string, std::string> h;
     fClient->hgetall(name, std::inserter(h, h.begin()));
-    std::string prefix = (fKey==name) ? ""s : name.substr(name.find_last_of(fSeparator)+1).data();
+    std::string prefix = (fKey==name)||(fGroupKey==name) ? ""s : name.substr(name.find_last_of(fSeparator)+1).data();
+    //LOG(info) << " prefix = " << prefix; 
     for (const auto &[field, value] : h) {
         auto f = prefix.empty() ? field : (prefix + fSeparator + field);
+        //LOG(info) << " f = " << f << ", field = " << field << ", value = " << value;  
         Parse(f, value);
     }
 }
@@ -206,28 +208,48 @@ void ParameterConfigPlugin::ReadParameters()
     if (fKey.empty()) {
         fKey = ParametersPrefix.data() + fSeparator + fId;
     }
+    if (fGroupKey.empty()) {
+        auto lastHyphen = fKey.find_last_of("-");
+        auto idx = fKey.substr(lastHyphen+1);
+        bool isNumber{true};
+        for (const auto& c : idx) {
+            if (!std::isdigit(c)) {
+                isNumber = false;
+                break;
+            }
+        }
+        if (isNumber) {
+            fGroupKey = fKey.substr(0, lastHyphen);
+        }
+    }
 
     //LOG(debug) << " parameter config key = " << fKey;
+    ReadHash(fGroupKey);
     ReadHash(fKey);
 
-    auto scanKey = fKey + fSeparator + "*";
-    //LOG(debug) << " parameter read hash done. scanning additional parameters ... : " << scanKey;
-    const auto keys = scan(*fClient, scanKey);
-    if (!keys.empty()) {
-        LOG(debug) << " additional parameters found.";
-        for (const auto & x : keys) {
-            auto t = fClient->type(x);
-            LOG(debug) << " key = " << x << ", type = " << t;
-            if (t=="string") {
-                ReadString(x);
-            } else if (t=="list") {
-                ReadList(x);
-            } else if (t=="hash") {
-                ReadHash(x);
-            } else if (t=="set") {
-                ReadSet(x);
-            } else if (t=="zset") {
-                ReadZset(x);
+    for (const auto &k : {fGroupKey, fKey}) {
+        if (k.empty()) {
+            continue;
+        }
+        auto scanKey = k + fSeparator + "*";
+        //LOG(debug) << " parameter read hash done. scanning additional parameters ... : " << scanKey;
+        const auto keys = scan(*fClient, scanKey);
+        if (!keys.empty()) {
+            LOG(debug) << " additional parameters found.";
+            for (const auto & x : keys) {
+                auto t = fClient->type(x);
+                LOG(debug) << " key = " << x << ", type = " << t;
+                if (t=="string") {
+                    ReadString(x);
+                } else if (t=="list") {
+                    ReadList(x);
+                } else if (t=="hash") {
+                    ReadHash(x);
+                } else if (t=="set") {
+                    ReadSet(x);
+                } else if (t=="zset") {
+                    ReadZset(x);
+                }
             }
         }
     }
