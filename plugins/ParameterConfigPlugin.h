@@ -42,6 +42,7 @@ private:
     std::string fId;
     std::string fSeparator;
     std::string fKey;
+    std::string fGroupKey;
 
     bool IsReservedOption(std::string_view name) const;
     void Parse(std::string_view name, std::string line);
