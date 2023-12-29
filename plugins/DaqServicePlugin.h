@@ -3,7 +3,6 @@
 
 // Redis client for DAQ service discovery
 
-
 // for linux pid
 #include <sys/types.h>
 #include <unistd.h>
@@ -49,7 +48,6 @@ struct Health {
 };
 
 class TopologyConfig;
-class RunLogger;
 
 class Plugin : public fair::mq::Plugin
 {
@@ -137,7 +135,6 @@ private:
     fair::mq::StateQueue fStateQueue;
 
     std::unique_ptr<TopologyConfig> fTopology;
-    std::unique_ptr<RunLogger> fLogger;
 };
 
 //_____________________________________________________________________________

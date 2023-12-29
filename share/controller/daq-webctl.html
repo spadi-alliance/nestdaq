@@ -13,12 +13,11 @@
     <p>
       <form onsubmit="return SubmitMessage('run_number')">
         New value:
-        <input type="text" id="run_number">
-        <input type="submit" value="Send">
-        <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis">
-        <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box">
-        <input type="checkbox" id="run-number-auto-increment-checkbox" name="run-number-auto-increment-checkbox" checked>
-        <label for="run-number-auto-increment-checkbox">Auto increment at RUN-Stop</label>
+        <input type="text" id="run_number"/>
+        <input type="submit" value="Send"/>
+        <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis"/>
+        <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box"/>
+        <label><input type="checkbox" id="run-number-auto-increment-checkbox" name="run-number-auto-increment-checkbox" checked/>Auto increment at RUN-Stop</label>
       </form>
       <div id="next_run_number">Next : </div>
       <div id="latest_run_number">Latest : </div>
@@ -28,6 +27,8 @@
    
     
     <h2>State transition command</h2>
+    <label><input type="checkbox" id="wait-device-ready" name="wait-device-ready-checkbox" onchange="redis_set_checkbox_status('wait-device-ready')" checked/>Wait Device Ready</label>
+    <label><input type="checkbox" id="wait-ready"        name="wait-ready-checkbox"        onchange="redis_set_checkbox_status('wait-ready')"        checked/>Wait Ready</label>
 
     <h3>Idle &RightTriangle; Running</h3>
     <p>
@@ -120,10 +121,13 @@
 
     const socket = new WebSocket(path);
 
-
     socket.onopen = function() {
        console.log('websocket initialized');
        this._ready = true;
+
+       //--------------------------------
+       redis_set_checkbox_status('wait-device-ready');
+       redis_set_checkbox_status('wait-ready');
     }
 
     socket.onmessage = function(e) {
@@ -350,6 +354,16 @@
 
 
     // --------------------------------------------------
+    function redis_set(key, value) {
+      SendMessage('{ "command": "redis-set", "name": "' + key + '", "value": "' + value + '" }');
+    }
+
+    // --------------------------------------------------
+    function redis_set_checkbox_status(key) {
+      SendMessage('{ "command": "redis-set", "name": "' + key + '", "value": "' + document.getElementById(key).checked + '" }');
+    }
+
+    // --------------------------------------------------
     function SendMessage(arg) {
       console.log(this.constructor.name + ': arg = ' + arg);
        if (socket) {
@@ -384,7 +398,7 @@
       //  alert('invalid run number = '+num +' (value is negative)');
       //  return false;
       //}
-      SendMessage('{ "command": "redis-set", "name": "' + arg + '", "value": "' + document.getElementById(arg).value + '" }');
+      redis_set(arg, document.getElementById(arg).value);
       redis_get('run_number');
       return false;
     }
@@ -549,6 +563,7 @@
     function UpdateWebSocketConnectedIdList(arg) {
       document.getElementById("websocketConnectedIdList").innerHTML = arg + "<br>";
     }
+
 
   </script>
 

@@ -15,7 +15,9 @@ public:
     static constexpr std::string_view StatusGood {"good"};
     listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint endpoint, std::shared_ptr<std::string const> const& doc_root);
 
-    const std::string get_status() const { return status_; }
+    const std::string get_status() const {
+        return status_;
+    }
 
     // Start accepting incoming connections
     void run() {

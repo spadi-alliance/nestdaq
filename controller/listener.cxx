@@ -4,7 +4,6 @@
 #include "controller/http_session.h"
 #include "controller/listener.h"
 
-
 //_____________________________________________________________________________
 listener::listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint endpoint, std::shared_ptr<std::string const> const& doc_root)
     : ioc_(ioc)

@@ -17,6 +17,8 @@ using namespace std::literals::string_literals;
 
 static constexpr std::string_view MyClass{"daq::service::ParameterConfigPlugin"};
 
+static constexpr std::string_view RedisKeySpacePrefix{"__keyspace@"};
+
 const std::unordered_set<std::string_view> reservedOptionsString
 {   "id",  //
     "transport", //
@@ -62,6 +64,7 @@ const std::unordered_set<std::string_view> reservedOptionsVectorString
 {   "channel-config", //
 };
 namespace daq::service {
+
 //_____________________________________________________________________________
 auto ParameterConfigPluginProgramOptions() -> fair::mq::Plugin::ProgOptions
 {
@@ -69,7 +72,7 @@ auto ParameterConfigPluginProgramOptions() -> fair::mq::Plugin::ProgOptions
     using opt = ParameterConfigPlugin::OptionKey;
     auto options = bpo::options_description(MyClass.data());
     options.add_options()
-    (opt::ServerUri.data(), bpo::value<std::string>(), "Redis server URI (if empty, the same URI of the service registry is used.)");
+           (opt::ServerUri.data(), bpo::value<std::string>(), "Redis server URI (if empty, the same URI of the service registry is used.)");
     return options;
 }
 
@@ -95,10 +98,34 @@ ParameterConfigPlugin::ParameterConfigPlugin(std::string_view name,
 
     SubscribeToDeviceStateChange([this](DeviceState newState) {
         // LOG(debug) << MyClass << " state change: " << GetStateName(newState);
-        if (fClient) {
-            ReadParameters();
+        try {
+            switch (newState) {
+            case DeviceState::Error:
+            case DeviceState::Exiting:
+                fPluginShutdownRequested = true;
+            default:
+                break;
+            }
+        } catch (const std::exception &e) {
+            LOG(error) << MyClass << " exception during device state change: " << e.what();
+        } catch (...) {
+            LOG(error) << MyClass << " exception during device state change: unknow exception";
         }
     });
+
+    if (fClient) {
+        ReadParameters();
+    }
+    fSubscriberThread = std::thread([this]() {
+        try {
+            SubscribeToParameterChange();
+        } catch (const std::exception &e) {
+            LOG(error) << MyClass << " in CheckThread" << e.what();
+        } catch (...) {
+            LOG(error) << MyClass << " unknown error in CheckThread";
+        }
+    });
+    fSubscriberThread.detach();
 }
 
 //_____________________________________________________________________________
@@ -158,10 +185,10 @@ void ParameterConfigPlugin::ReadHash(const std::string& name)
     std::unordered_map<std::string, std::string> h;
     fClient->hgetall(name, std::inserter(h, h.begin()));
     std::string prefix = (fKey==name)||(fGroupKey==name) ? ""s : name.substr(name.find_last_of(fSeparator)+1).data();
-    //LOG(info) << " prefix = " << prefix; 
+    //LOG(info) << " prefix = " << prefix;
     for (const auto &[field, value] : h) {
         auto f = prefix.empty() ? field : (prefix + fSeparator + field);
-        //LOG(info) << " f = " << f << ", field = " << field << ", value = " << value;  
+        //LOG(info) << " f = " << f << ", field = " << field << ", value = " << value;
         Parse(f, value);
     }
 }
@@ -227,7 +254,9 @@ void ParameterConfigPlugin::ReadParameters()
     ReadHash(fGroupKey);
     ReadHash(fKey);
 
-    for (const auto &k : {fGroupKey, fKey}) {
+    for (const auto &k : {
+                fGroupKey, fKey
+            }) {
         if (k.empty()) {
             continue;
         }
@@ -337,6 +366,48 @@ void ParameterConfigPlugin::SetPropertyOfReservedOption(std::string_view name, s
 }
 
 //_____________________________________________________________________________
+void ParameterConfigPlugin::SubscribeToParameterChange()
+{
+    using opt = ParameterConfigPlugin::OptionKey;
+    LOG(debug) << " create a subscriber. (parameter change)";
+    auto sub = fClient->subscriber();
+
+    const auto &serverUri = GetProperty<std::string>(opt::ServerUri.data());
+    const auto dbNumber = serverUri.substr(serverUri.find_last_of("/")+1);
+    LOG(debug) << " db number = " << dbNumber;
+    const std::string redisKeySpaceNotificationChannel = RedisKeySpacePrefix.data() + dbNumber + "__:"s + fKey;
+    LOG(debug) << " key-space-notification channel = " << redisKeySpaceNotificationChannel;
+
+    sub.on_message([this, &redisKeySpaceNotificationChannel](auto channel, auto msg) {
+        //LOG(debug) << MyClass << " on_message(MESSAGE): channel = " << channel << " msg = " << msg;
+        if (redisKeySpaceNotificationChannel!=channel) {
+            return;
+        }
+        ReadParameters();
+    });
+
+    sub.subscribe(redisKeySpaceNotificationChannel);
+
+    while (!fPluginShutdownRequested) {
+        try {
+            sub.consume();
+        } catch (const sw::redis::TimeoutError &e) {
+            // try again.
+        } catch (const sw::redis::Error &e) {
+            LOG(error) << MyClass << "::" << __func__ << ": error in consume(): " << e.what();
+            break;
+        } catch (const std::exception& e) {
+            LOG(error) << MyClass << "::" << __func__ << ": error in consume(): " << e.what();
+            break;
+        } catch (...) {
+            LOG(error) << MyClass << "::" << __func__ << ": unknown exception";
+            break;
+        }
+    }
+    LOG(debug) << " " << __func__ << " exit.";
+}
+
+//_____________________________________________________________________________
 void ParameterConfigPlugin::ToArray(std::string_view name, std::string line)
 {
     std::vector<std::string> v;
@@ -355,7 +426,7 @@ void ParameterConfigPlugin::ToArray(std::string_view name, std::string line)
 //_____________________________________________________________________________
 void ParameterConfigPlugin::ToMap(std::string_view name, std::string line)
 {
-    // Assuming the number of counts of "," and "=" are the same.
+    // Assuming the counts of "," and "=" are the same.
     std::vector<std::string> v;
     // remove left-space and right space
     boost::trim_if(line, boost::is_space());

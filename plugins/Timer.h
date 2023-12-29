@@ -5,7 +5,6 @@
 #include <memory>
 #include <boost/asio.hpp>
 
-
 namespace daq::service {
 namespace net = boost::asio;
 using strand_t = net::strand<net::io_context::executor_type>;

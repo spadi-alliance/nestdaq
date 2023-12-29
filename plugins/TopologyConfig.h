@@ -15,7 +15,6 @@
 #include "plugins/TopologyData.h"
 #include "plugins/DaqServicePlugin.h"
 
-
 // forward declaration
 namespace sw::redis {
 class Redis;
@@ -34,12 +33,19 @@ public:
     TopologyConfig& operator=(const TopologyConfig&) = delete;
     ~TopologyConfig();
 
+    void ConfigConnect();
     void EnableUds(bool f=true) {
         fEnableUds = f;
     }
     void OnDeviceStateChange(DeviceState newState);
     void Reset();
     void ResetTtl(sw::redis::Pipeline& pipe);
+    void SetConnectConfig(std::string_view arg) {
+        fConnectConfig = arg.data();
+    }
+    void SetMaxRetryToResolveAddress(int arg) {
+        fMaxRetryToResolveAddress = arg;
+    }
 
 private:
     void DeleteProperty(const std::string& key) {
@@ -90,6 +96,8 @@ private:
     std::string fTopPrefix;
     long long   fMaxTtl;
     bool        fEnableUds;
+    std::string fConnectConfig;
+    int         fMaxRetryToResolveAddress;
 
     // channel properties configured by command line option or JSON
     std::map<std::string, std::string> fDefaultChannelProperties;

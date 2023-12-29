@@ -1,7 +1,6 @@
 #ifndef DaqService_Plugins_MetricsPlugin_h
 #define DaqService_Plugins_MetricsPlugin_h
 
-
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -179,13 +178,11 @@ private:
     std::string fServiceName;
     std::string fTopPrefix;
 
-
     // keys for hash (displayed in table)
     ProcessStatKey fProcKey;
     std::string fStateKey;
     std::string fLastUpdateKey;
     std::string fLastUpdateNSKey;
-
 
     SocketMetricsKey fSockKey;
     SocketMetricsKey fSockSumKey;

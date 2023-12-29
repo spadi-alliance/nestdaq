@@ -38,7 +38,6 @@ struct LinkProperty {
     std::string options;
 };
 
-
 using MQChannel = std::map<std::string, SocketProperty>;
 
 } // namespae daq::service

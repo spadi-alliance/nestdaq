@@ -3,7 +3,6 @@
 #include "controller/websocket_session.h"
 #include "controller/http_session.h"
 
-
 //_____________________________________________________________________________
 http_session::queue::queue(http_session& self)
     : self_(self)

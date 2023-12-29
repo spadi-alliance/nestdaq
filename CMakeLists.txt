@@ -121,12 +121,6 @@ endif()
 message(STATUS "FairLogger_INCDIR: ${FairLogger_INCDIR}")
 message(STATUS "FairLogger_LIBDIR: ${FairLogger_LIBDIR}")
 
-if(fmt_DIR)
-  message(STATUS "fmt_DIR: ${fmt_DIR}")
-  set(fmt_LIB fmt::fmt)
-  message(STATUS "fmt_LIB: ${fmt_LIB}")
-endif()
-
 
 #------------------------------------------------------------------------------
 add_subdirectory(plugins)
