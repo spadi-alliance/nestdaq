@@ -72,7 +72,6 @@ public:
         return fClient;
     }
 
-
     void InitializeFunctionList();
     void ProcessData(unsigned int connid, const std::string& arg);
     void RemoveWebSocketId(unsigned int connid);
@@ -138,8 +137,8 @@ private:
     void RedisSet(unsigned int connid, const boost::property_tree::ptree& arg);
     void SendStateSummary(const std::map<std::string, ServiceState> &summaryTable);
     void SubscribeToRedisPubSub();
-    // write operation on redis
-    void WriteRunNumber(unsigned int connid, const boost::property_tree::ptree& arg);
+    void Wait(const std::unordered_set<std::string> &services, const std::unordered_set<std::string> &instances, const std::vector<std::string> &waitStateTargets);
+    void Wait(const std::vector<std::string> &keys, const std::vector<std::string> &waitStateTargets);
 
     std::mutex fMutex;
     std::unordered_map<std::string, ProcessDataFunc> fFuncList;
@@ -168,6 +167,5 @@ private:
     std::string fSaveCommand;
     bool fRecreateTS;
 };
-
 
 #endif

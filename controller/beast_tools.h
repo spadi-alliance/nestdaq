@@ -12,7 +12,6 @@ namespace websocket = beast::websocket;         // from <boost/beast/websocket.h
 namespace net = boost::asio;                    // from <boost/asio.hpp>
 using tcp = net::ip::tcp;                       // from <boost/asio/ip/tcp.hpp>
 
-
 //_____________________________________________________________________________
 // Report a failure
 void fail(beast::error_code ec, char const* what);
@@ -32,7 +31,6 @@ beast::string_view mime_type(beast::string_view path);
 // Append an HTTP rel-path to a local filesystem path.
 // The returned path is normalized for the platform.
 std::string path_cat(beast::string_view base, beast::string_view path);
-
 
 //_____________________________________________________________________________
 template<class Body, class Allocator, class Send>

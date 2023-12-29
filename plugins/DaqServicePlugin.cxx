@@ -24,8 +24,6 @@
 #include "plugins/Constants.h"
 #include "plugins/Functions.h"
 #include "plugins/tools.h"
-#include "plugins/LoggingFileSink.h"
-#include "plugins/DaqRunLogger.h"
 #include "plugins/DaqServicePlugin.h"
 
 // valid if _GNU_SOURCE is defined
@@ -38,6 +36,8 @@ static constexpr std::string_view MyClass{"daq::service::Plugin"};
 static constexpr std::string_view StartupState{"startup-state"};
 
 static constexpr std::string_view EnableUds{"enable-uds"};
+static constexpr std::string_view ConnectConfig{"connect-config"};
+static constexpr std::string_view MaxRetryToResolveAddress{"max-retry-to-resolve-address"};
 
 static const std::unordered_set<std::string_view> knownCommandList{
     fairmq::command::Bind,
@@ -72,38 +72,46 @@ auto PluginProgramOptions() -> fair::mq::Plugin::ProgOptions
     namespace bpo = boost::program_options;
 
     LOG(debug) << "daq::service::PluginProgramOptions: add_options";
-    using opt_logger = RunLogger::OptionKey;
     auto pluginOptions = bpo::options_description(MyClass.data());
     pluginOptions.add_options() //
-    (ServiceName.data(),        bpo::value<std::string>(),  "name of this service")
-    //
-    (Uuid.data(),               bpo::value<std::string>(),  "uuid of this service")
-    //
-    (HostIpAddress.data(),      bpo::value<std::string>(),  "IP address or hostname of this service")
-    //
-    (Hostname.data(),           bpo::value<std::string>(),  "hostname of this service")
-    //
-    (ServiceRegistryUri.data(), bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379/0"), "DAQ service registry's URI")
-    //
-    (Separator.data(),          bpo::value<std::string>()->default_value(":"), "separator charactor for key space name")
-    //
-    (MaxTtl.data(),             bpo::value<long long>()->default_value(5), "max TTL (time-to-live) in second for keys")
-    //
-    (TtlUpdateInterval.data(),  bpo::value<long long>()->default_value(3), "TTL update interval in second for keys")
-    //
-    (StartupState.data(),       bpo::value<std::string>()->default_value("idle"),
-     "state on startup. (idle, initializing-device, initialized, bound, device-ready, ready, running)")
-    //
-    (EnableUds.data(),          bpo::value<bool>()->default_value(false),
-     "Use Unix Domain Socket for the local IPC if available (bool)")
-    //
-    (opt_logger::RunLogPrefix.data(), bpo::value<std::string>(), "prefix of file path for run-by-run logging")
-    //
-    (opt_logger::RunLogSeverity.data(), bpo::value<std::string>()->default_value("trace"), "severity for run-by-run logging")
-    //
-    (opt_logger::RunNumberFormat.data(), bpo::value<std::string>()->default_value("run{:08d}"), "run number format for the file path");
+                 (ServiceName.data(),        bpo::value<std::string>(),  "name of this service")
+                 //
+                 (Uuid.data(),               bpo::value<std::string>(),  "uuid of this service")
+                 //
+                 (HostIpAddress.data(),      bpo::value<std::string>(),  "IP address or hostname of this service")
+                 //
+                 (Hostname.data(),           bpo::value<std::string>(),  "hostname of this service")
+                 //
+                 (ServiceRegistryUri.data(), bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379/0"), "DAQ service registry's URI")
+                 //
+                 (Separator.data(),          bpo::value<std::string>()->default_value(":"), "separator character for key space name")
+                 //
+                 (MaxTtl.data(),             bpo::value<long long>()->default_value(5), "max TTL (time-to-live) in second for keys")
+                 //
+                 (TtlUpdateInterval.data(),  bpo::value<long long>()->default_value(3), "TTL update interval in second for keys")
+                 //
+                 (StartupState.data(),       bpo::value<std::string>()->default_value("idle"),
+                  "state on startup. (idle, initializing-device, initialized, bound, device-ready, ready, running)")
+                 //
+                 (EnableUds.data(),          bpo::value<std::string>()->default_value("true"),
+                  "Use Unix Domain Socket for the local IPC if available (bool)")
+                 //
+                 (ConnectConfig.data(),          bpo::value<std::string>(),
+                  "MQ channel parameters of JSON string for temporary connection with method=connect\n"
+                  " '{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\n\n"
+                  " NOTE: When using start_device.sh, the JSON string must be enclosed in \\' (backslash + single quote)\n"
+                  " \\''{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\\'\n\n"
+                  " e.g. 1 \n"
+                  " '{ \"in\": { \"type\": \"pull\", \"peer\": \"Sampler:out\" } }'\n"
+                  " e.g. 2 \n"
+                  " '{ \"in\": { \"type\": \"pill\",  \"peer\": \"Sampler-0:out\" } }'\n"
+                  " e.g. 3 \n"
+                  " '{ \"in\": {\"type\": \"sub\", \"peer\": [ \"Sampler:Sampler-0:out[0]\", \"Sampler:Sampler-1:out[1]\" ] } }'\n"
+                  " e.g. 4 \n"
+                  " '{ \"in\": {\"type\": \"sub\", \"peer\": \"Sampler:Sampler-0:out[0]\" }, \"out\": { \"type\": \"pub\",  \"peer\": \"Sink:Sink-2:in[1]\" } }'\n")
+                 //
+                 (MaxRetryToResolveAddress.data(), bpo::value<std::string>()->default_value("10"), "max retry to resolve connect address");
 
-    LoggingFileSink::AddOptions(pluginOptions);
     return pluginOptions;
 }
 
@@ -190,13 +198,10 @@ Plugin::Plugin(std::string_view name,
     }
     fStartupState   = GetProperty<std::string>(StartupState.data());
 
-
-
     auto hostIPs = fair::mq::tools::getHostIPs();
     for (const auto& [nic, ip] : hostIPs) {
         LOG(debug) << " nic = " << nic << ", ip = " << ip;
     }
-
 
     try {
         TakeDeviceControl();
@@ -212,7 +217,12 @@ Plugin::Plugin(std::string_view name,
     // register to service registry
     Register();
     fTopology = std::make_unique<TopologyConfig>(*this);
-    fTopology->EnableUds(GetProperty<bool>(EnableUds.data()));
+    if (PropertyExists(ConnectConfig.data())) {
+        fTopology->SetConnectConfig(GetProperty<std::string>(ConnectConfig.data()));
+        fTopology->SetMaxRetryToResolveAddress(std::stoi(GetProperty<std::string>(MaxRetryToResolveAddress.data())));
+        // for quick debug
+        //fTopology->ConfigConnect();
+    }
 
     LOG(warn) << MyClass << " SubscribeToDeviceStateChange()";
     SubscribeToDeviceStateChange([this](DeviceState newState) {
@@ -224,6 +234,8 @@ Plugin::Plugin(std::string_view name,
             fClient->set(fFairMQStateKey, stateName);
             WriteProgOptions();
             ReadRunNumber();
+            const auto& v = boost::to_lower_copy(GetProperty<std::string>(EnableUds.data()));
+            fTopology->EnableUds((v=="1") || (v=="true"));
             switch (newState) {
             case DeviceState::Idle:
                 fResetDeviceRequested = false;
@@ -638,15 +650,6 @@ void Plugin::ReadRunNumber()
     if (myRunNumber!=*runNumber) {
         LOG(warn) << MyClass << " update run number " << *runNumber << " (old = " << myRunNumber << ")";
         SetProperty(RunNumber.data(), *runNumber);
-
-        using opt = RunLogger::OptionKey;
-        if (PropertyExists(opt::RunLogPrefix.data())) {
-            auto runLogPrefix   = GetProperty<std::string>(opt::RunLogPrefix.data());
-            auto runLogSeverity = GetProperty<std::string>(opt::RunLogSeverity.data());
-            auto runNumberFormat = GetProperty<std::string>(opt::RunNumberFormat.data());
-            fLogger = std::make_unique<RunLogger>(std::stoll(*runNumber), runLogSeverity, runLogPrefix, runNumberFormat);
-        }
-
     } else {
         // LOG(debug) << MyClass << " same run number " << *runNumber << " (old = " << myRunNumber << ")";
     }
@@ -664,18 +667,6 @@ void Plugin::Register()
             fClient->command("client", "setname", join({TopPrefix.data(), fServiceName, fId}, fSeparator));
         }
         SetId();
-        if (PropertyExists(LoggingFileSink::OptionKey::Prefix.data())>0) {
-            const auto &log_prefix = GetProperty<std::string>(LoggingFileSink::OptionKey::Prefix.data());
-            std::string log_severity;
-            std::string log_verbosity;
-            if (PropertyExists(LoggingFileSink::OptionKey::Severity.data())>0) {
-                log_severity = GetProperty<std::string>(LoggingFileSink::OptionKey::Severity.data());
-            }
-            if (PropertyExists(LoggingFileSink::OptionKey::Verbosity.data())>0) {
-                log_verbosity = GetProperty<std::string>(LoggingFileSink::OptionKey::Verbosity.data());
-            }
-            LoggingFileSink::Open(log_prefix, log_severity, log_verbosity, fId);
-        }
         LOG(debug) << " mq device id = " << fId << ", service = " << fServiceName << ", hostname = " << fHealth->hostName
                    << " ip(from_hostname) = " << fair::mq::tools::getIpFromHostname(fHealth->hostName)
 
@@ -690,7 +681,6 @@ void Plugin::Register()
         fRegisteredKeys.insert(fFairMQStateKey);
         fRegisteredKeys.insert(fUpdateTimeKey);
         LOG(debug) << " precense (key) = " << fPresence->key << ", presence (ttl) = " << fMaxTtl;
-
 
         if (!fContext) {
             // create io_context, work_guard (to avoid exit of io_context::run())
@@ -709,7 +699,6 @@ void Plugin::Register()
                 ResetTtl();
                 return false; // for restart
             });
-
 
         }
 
@@ -900,7 +889,6 @@ void Plugin::SetId()
                         fClient->hdel(key, indexExpired.cbegin(), indexExpired.cend());
                     }
                     LOG(debug) << " number of expired uuids " << indexExpired.size();
-
 
                     if (myIndex.empty()) {
                         for (auto index=0; ; ++index) {

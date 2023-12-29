@@ -130,11 +130,11 @@ auto daq::service::MetricsPluginProgramOptions() -> fair::mq::Plugin::ProgOption
 
     auto options = bpo::options_description(MyClass.data());
     options.add_options()
-    (opt::UpdateInterval.data(), bpo::value<long long>()->default_value(1000),     "update interval in milliseconds for CPU and memory usage.")
-    (opt::ServerUri.data(),      bpo::value<std::string>(),                        "Redis server URI (if empty, the same URI of the service registry is used.)")
-    (opt::Retention.data(),      bpo::value<std::string>()->default_value("0"),    "Retention time in msec for time series data. When set to 0, the series is not trimmed at all.")
-    (opt::RecreateTS.data(),     bpo::value<std::string>()->default_value("true"), "Recreate timeseries data on state transition to Running")
-    (opt::MaxTtl.data(),         bpo::value<std::string>()->default_value("3000"), "Max TTL for metrics in milliseconds. (if zero or negative, no TTL is set.)");
+           (opt::UpdateInterval.data(), bpo::value<long long>()->default_value(1000),     "update interval in milliseconds for CPU and memory usage.")
+           (opt::ServerUri.data(),      bpo::value<std::string>(),                        "Redis server URI (if empty, the same URI of the service registry is used.)")
+           (opt::Retention.data(),      bpo::value<std::string>()->default_value("0"),    "Retention time in msec for time series data. When set to 0, the series is not trimmed at all.")
+           (opt::RecreateTS.data(),     bpo::value<std::string>()->default_value("true"), "Recreate timeseries data on state transition to Running")
+           (opt::MaxTtl.data(),         bpo::value<std::string>()->default_value("3000"), "Max TTL for metrics in milliseconds. (if zero or negative, no TTL is set.)");
     return options;
 }
 
@@ -162,7 +162,6 @@ daq::service::MetricsPlugin::MetricsPlugin(std::string_view name,
     fServiceName = GetProperty<std::string>(ServiceName.data());
     fSeparator   = GetProperty<std::string>(Separator.data());
     fTopPrefix   = MetricsPrefix.data();
-
 
     fRetentionMS = GetProperty<std::string>(opt::Retention.data());
     fMaxTtl      = std::stoll(GetProperty<std::string>(opt::MaxTtl.data()));
@@ -194,7 +193,6 @@ daq::service::MetricsPlugin::MetricsPlugin(std::string_view name,
     fBytesKey         = join({fTopPrefix, BytesPrefix.data()},         fSeparator);
     fNumMessageSumKey = join({fTopPrefix, NumMessageSumPrefix.data()}, fSeparator);
     fBytesSumKey      = join({fTopPrefix, BytesSumPrefix.data()},      fSeparator);
-
 
     auto t     = ReplaceAll(fProcKey, std::string(fTopPrefix)+fSeparator.data(), "");
     fTsProcKey = Prepend(t, join({"ts", fId}, fSeparator), fSeparator);
@@ -685,7 +683,6 @@ void daq::service::MetricsPlugin::SendProcessMetrics()
     // memory usage in MiB
     auto ramUsage = static_cast<double>(nowProcSelfStat.rss) * fPageSize / 1024/1024;
 
-
 //  LOG(debug) << " diff (self) = " << diffSelf
 //             << ", diff (all) = " << diffAll << "\n"
 //             << "cpu = " << cpuUsage
@@ -757,7 +754,6 @@ void daq::service::MetricsPlugin::SendSocketMetrics(const std::string &content)
     //  std::cout << __LINE__<< " " << itr->str() << " " << m[i++].str() << std::endl;
     //}
 
-
     SocketMetrics now;
     now.msgIn    = std::stod(m[NumMessageIn].str());
     now.msgOut   = std::stod(m[NumMessageOut].str());
@@ -777,8 +773,6 @@ void daq::service::MetricsPlugin::SendSocketMetrics(const std::string &content)
 
     auto msgInSum  = static_cast<uint64_t>(std::nearbyint(sum.msgIn));
     auto msgOutSum = static_cast<uint64_t>(std::nearbyint(sum.msgOut));
-
-
 
     try {
         if (fPipe) {

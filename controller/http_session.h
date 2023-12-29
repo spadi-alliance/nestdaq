@@ -73,7 +73,6 @@ class http_session : public std::enable_shared_from_this<http_session>
         }
     };
 
-
 public:
     // Take ownership of the socket
     http_session(tcp::socket&& socket, std::shared_ptr<std::string const> const& doc_root);
@@ -92,7 +91,6 @@ private:
     // The parser is stored in an optional container so we can
     // construct it from scratch it at the beginning of each new message.
     boost::optional<http::request_parser<http::string_body>> parser_;
-
 
     void do_read();
     void on_read(beast::error_code ec, std::size_t bytes_transferred);

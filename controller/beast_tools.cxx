@@ -4,7 +4,6 @@
 
 #include "controller/beast_tools.h"
 
-
 //_____________________________________________________________________________
 void fail(beast::error_code ec, char const* what)
 {

@@ -11,8 +11,8 @@ namespace bpo = boost::program_options;
 void addCustomOptions(bpo::options_description& options)
 {
     options.add_options()
-    ("text", bpo::value<std::string>()->default_value("Hello"), "Text to send out")
-    ("max-iterations", bpo::value<std::string>()->default_value("0"), "Maximum number of iterations of Run/ConditionalRun/OnData (0 - infinite)");
+           ("text", bpo::value<std::string>()->default_value("Hello"), "Text to send out")
+           ("max-iterations", bpo::value<std::string>()->default_value("0"), "Maximum number of iterations of Run/ConditionalRun/OnData (0 - infinite)");
 
 }
 
@@ -33,7 +33,6 @@ void PrintConfig(const fair::mq::ProgOptions* config, std::string_view name, std
     }
     LOG(debug) << ss.str();
 }
-
 
 //_____________________________________________________________________________
 Sampler::Sampler()
@@ -62,7 +61,6 @@ void Sampler::Init()
     PrintConfig(fConfig, "channel-config", __PRETTY_FUNCTION__);
     PrintConfig(fConfig, "chans.", __PRETTY_FUNCTION__);
 }
-
 
 //_____________________________________________________________________________
 void Sampler::InitTask()

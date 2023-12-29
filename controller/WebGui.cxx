@@ -1,8 +1,8 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <regex>
 #include <sstream>
-#include <unordered_set>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
@@ -23,6 +23,20 @@ static constexpr std::string_view MyClass{"WebGui"};
 constexpr int NStates = static_cast<int>(fair::mq::State::Exiting) + 1;
 
 using namespace std::string_literals;
+using namespace std::chrono_literals;
+
+namespace run_info {
+static constexpr std::string_view Prefix{"run_info"};
+static constexpr std::string_view LatestRunNumber{"latest_run_number"};
+static constexpr std::string_view RunNumber{"run_number"};
+static constexpr std::string_view WaitDeviceReady{"wait-device-ready"};
+static constexpr std::string_view WaitReady{"wait-ready"};
+static const std::unordered_set<std::string_view> knownRunInfoList{
+    RunNumber,
+    WaitDeviceReady,
+    WaitReady,
+};
+}
 
 static const std::unordered_set<std::string_view> knownCommandList{
     fairmq::command::Bind,
@@ -39,6 +53,17 @@ static const std::unordered_set<std::string_view> knownCommandList{
     daq::command::Quit,
     daq::command::Reset,
     daq::command::Start,
+};
+
+static const std::vector<std::string> waitDeviceReadyTargets {
+    GetStateName(fair::mq::State::DeviceReady),
+    GetStateName(fair::mq::State::Ready),
+    GetStateName(fair::mq::State::Running),
+};
+
+static const std::vector<std::string> waitReadyTargets {
+    GetStateName(fair::mq::State::Ready),
+    GetStateName(fair::mq::State::Running),
 };
 
 //_____________________________________________________________________________
@@ -91,7 +116,7 @@ bool WebGui::ConnectToRedis(std::string_view redisUri,
 
     // E: Enable key-event notification, published with "__keyevent@<db>__" prefix
     // x: Expired events (events generated every time a key expires)
-    fClient->command("config", "set", "notify-keyspace-events", "Ex");
+    fClient->command("config", "set", "notify-keyspace-events", "AKE");
     const auto &db = GetRedisDBNumber(redisUri.data());
     fRedisKeyEventChannelName = "__keyevent@"s + db + "__:expired"s;
 
@@ -112,13 +137,13 @@ bool WebGui::ConnectToRedis(std::string_view redisUri,
 void WebGui::CopyLatestRunNumber(unsigned int connid)
 {
     LOG(debug) << __func__ << " websocket connid = " << connid << std::endl;
-    std::string name{"run_info" + fSeparator + "run_number"};
+    std::string name{run_info::Prefix.data() + fSeparator + run_info::RunNumber.data()};
     auto ret = fClient->get(name);
     if (!ret) {
         Send(connid, {R"({ "type": "error", "value": "could not get run number from redis." })"});
         return;
     }
-    name = "run_info" + fSeparator + "latest_run_number";
+    name = run_info::Prefix.data() + fSeparator + run_info::LatestRunNumber.data();
     fClient->set(name, *ret);
 
     if (!fDBDir.empty()) {
@@ -137,7 +162,7 @@ void WebGui::CopyLatestRunNumber(unsigned int connid)
 void WebGui::IncrementRunNumber(unsigned int connid)
 {
     LOG(debug) << __func__ << " websocket connid = " << connid << std::endl;
-    std::string name{"run_info" + fSeparator + "run_number"};
+    std::string name{run_info::Prefix.data() + fSeparator + run_info::RunNumber.data()};
 
     auto newValue = fClient->incr(name);
 
@@ -169,25 +194,25 @@ void WebGui::InitializeFunctionList()
         },
 
         // send command via redis pub/sub channels
-        {"redis-publish", [this](auto id, const auto &arg) {
+        {   "redis-publish", [this](auto id, const auto &arg) {
                 RedisPublishDaqCommand(id, arg);
             }
         },
 
         // read from redis
-        {"redis-get", [this](auto id, const auto &arg) {
+        {   "redis-get", [this](auto id, const auto &arg) {
                 RedisGet(id, arg);
             }
         },
 
         // write to redis
-        {"redis-set", [this](auto id, const auto &arg) {
+        {   "redis-set", [this](auto id, const auto &arg) {
                 RedisSet(id, arg);
             }
         },
 
         // increment operation on redis
-        {"redis-incr", [this](auto id, const auto &arg) {
+        {   "redis-incr", [this](auto id, const auto &arg) {
                 RedisIncr(id, arg);
             }
         },
@@ -326,14 +351,12 @@ void WebGui::ProcessExpiredKey(std::string_view key)
     }
 }
 
-
-
 //_____________________________________________________________________________
 // read operation on redis and send the value to the web client
 void WebGui::ReadLatestRunNumber(unsigned int connid)
 {
     LOG(debug) << __func__ << " websocket connid = " << connid;
-    std::string name{"run_info" + fSeparator + "latest_run_number"};
+    std::string name{run_info::Prefix.data() + fSeparator + run_info::LatestRunNumber.data()};
     auto ret = fClient->get(name);
     if (!ret) {
         Send(connid, {R"({ "type": "error", "value": "could not get latest run number from redis." })"});
@@ -351,7 +374,7 @@ void WebGui::ReadLatestRunNumber(unsigned int connid)
 void WebGui::ReadRunNumber(unsigned int connid)
 {
     LOG(debug) << __func__ << " websocket connid = " << connid;
-    std::string name{"run_info" + fSeparator + "run_number"};
+    std::string name{run_info::Prefix.data() + fSeparator + run_info::RunNumber.data()};
     auto ret = fClient->get(name);
     if (!ret) {
         Send(connid, {R"({ "type": "error", "value": "could not get run number from redis." })"});
@@ -392,6 +415,25 @@ void WebGui::RedisIncr(unsigned int connid, const boost::property_tree::ptree &a
 // publish command via redis
 void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_tree::ptree& arg)
 {
+    auto isWaitFlagSet = [this](const auto &s) {
+        auto w = fClient->get(run_info::Prefix.data() + fSeparator + s);
+        if (!w) {
+            return false;
+        }
+        const auto &v = boost::to_lower_copy(*w);
+        return (v == "1") || (v == "true");
+    };
+    auto toMessage = [&arg](const auto &v) {
+        boost::property_tree::ptree cmd;
+        cmd.put("command", "change_state");
+        cmd.put("value", v);
+        cmd.add_child("services", arg.get_child("services"));
+        cmd.add_child("instances", arg.get_child("instances"));
+        //cmd.put("service", "all");
+        //cmd.put("instance", "all");
+        return to_string(cmd);
+    };
+
     const auto& arg_str = to_string(arg);
     LOG(debug) << __func__ << " arg = " << arg_str;
     const auto &val = arg.get_optional<std::string>("value");
@@ -408,30 +450,59 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
         LOG(debug) << " connid = " << connid;
 
         try {
-            boost::property_tree::ptree cmd;
-            cmd.put("command", "change_state");
-            cmd.put("value", v);
-            cmd.add_child("services", arg.get_child("services"));
-            cmd.add_child("instances", arg.get_child("instances"));
-            //cmd.put("service", "all");
-            //cmd.put("instance", "all");
-            const auto& command = to_string(cmd);
+
+            bool waitDeviceReadyFlag = isWaitFlagSet(run_info::WaitDeviceReady.data());
+            bool waitReadyFlag       = isWaitFlagSet(run_info::WaitReady.data());
+            std::unordered_set<std::string> services;
+            for (const auto& x : arg.get_child("services")) {
+                services.emplace(x.second. template get_value<std::string>());
+            }
+            std::unordered_set<std::string> instances;
+            for (const auto& x : arg.get_child("instances")) {
+                instances.emplace(x.second. template get_value<std::string>());
+            }
 
             // use boost::iequals for case insensitive compare
-            if (boost::iequals(v, fairmq::command::Run)) {
+            if (boost::iequals(v, fairmq::command::Connect)) {
+                fClient->publish(fChannelName, toMessage(fairmq::command::Connect));
+                if (waitDeviceReadyFlag) {
+                    Wait(services, instances, waitDeviceReadyTargets);
+                }
+
+            } else if (boost::iequals(v, fairmq::command::InitTask)) {
+                if (waitDeviceReadyFlag) {
+                    fClient->publish(fChannelName, toMessage(fairmq::command::Connect));
+                    Wait(services, instances, waitDeviceReadyTargets);
+                }
+                fClient->publish(fChannelName, toMessage(fairmq::command::InitTask));
+                if (waitReadyFlag) {
+                    Wait(services, instances, waitReadyTargets);
+                }
+
+            } else if (boost::iequals(v, fairmq::command::Run)) {
+                if (waitDeviceReadyFlag) {
+                    fClient->publish(fChannelName, toMessage(fairmq::command::Connect));
+                    Wait(services, instances, waitDeviceReadyTargets);
+                }
+                if (waitReadyFlag) {
+                    fClient->publish(fChannelName, toMessage(fairmq::command::InitTask));
+                    Wait(services, instances, waitReadyTargets);
+                }
                 LOG(debug) << " pre-run = " << fPreRunCommand;
                 boost::process::system(fPreRunCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
-                fClient->publish(fChannelName, command);
+                fClient->publish(fChannelName, toMessage(fairmq::command::Run));
                 LOG(debug) << " post-run = " << fPostRunCommand;
                 boost::process::system(fPostRunCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+
             } else if (boost::iequals(v,  fairmq::command::Stop)) {
                 LOG(debug) << " pre-stop = " << fPreStopCommand;
                 boost::process::system(fPreStopCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
-                fClient->publish(fChannelName, command);
+                fClient->publish(fChannelName, toMessage(fairmq::command::Stop));
                 LOG(debug) << " post-stop = " << fPostStopCommand;
                 boost::process::system(fPostStopCommand.data(), boost::process::std_out > stdout, boost::process::std_err > stderr, boost::process::std_in < stdin);
+
             } else {
-                fClient->publish(fChannelName, command);
+                fClient->publish(fChannelName, toMessage(v));
             }
         } catch (const std::exception &e) {
             LOG(error) << __func__ << " e.what() = " << e.what();
@@ -442,15 +513,21 @@ void WebGui::RedisPublishDaqCommand(unsigned int connid, const boost::property_t
 
 }
 
-
 //_____________________________________________________________________________
 void WebGui::RedisSet(unsigned int connid, const boost::property_tree::ptree &arg)
 {
     LOG(debug) <<  __func__ << " " << connid;
     const auto &name = arg.get_optional<std::string>("name");
     if (name) {
-        if (*name=="run_number") {
-            WriteRunNumber(connid, arg);
+        if (run_info::knownRunInfoList.count(*name)>0) {
+
+            auto val = arg.get_optional<std::string>("value");
+            if (!val) {
+                LOG(error) << MyClass << " " << __func__ << " parse error ";
+                return;
+            }
+            std::string key{run_info::Prefix.data() + fSeparator + *name};
+            fClient->set(key, *val);
         }
     }
 }
@@ -612,15 +689,76 @@ void WebGui::SubscribeToRedisPubSub()
 }
 
 //_____________________________________________________________________________
-// write operation on redis
-void WebGui::WriteRunNumber(unsigned int connid, const boost::property_tree::ptree& arg)
+void WebGui::Wait(const std::vector<std::string> &keys, const std::vector<std::string>& waitStateTargets)
 {
-    //std::cout << __func__ << " connid = " << connid << ", arg = " << arg << std::endl;
-    auto val = arg.get_optional<std::string>("value");
-    if (!val) {
-        LOG(error) << MyClass << " " << __func__ << " parse error ";
+    std::unordered_set<std::string> stateKeys;
+    for (const auto &k : keys) {
+        auto s = daq::service::scan(*fClient, {daq::service::TopPrefix.data(), k, daq::service::FairMQStatePrefix.data()}, fSeparator);
+        stateKeys.merge(s);
+    }
+
+    if (stateKeys.empty()) {
         return;
     }
-    std::string key{"run_info" + fSeparator + "run_number"};
-    fClient->set(key, *val);
+
+    // {
+    //     std::string k;
+    //     for (const auto &x : stateKeys) {
+    //         k += x + ", ";
+    //     }
+    //     LOG(debug) << " stateKeys = " << k;
+    // }
+
+    bool done{false};
+    while (!done) {
+        std::vector<sw::redis::OptionalString> stateValues;
+        fClient->mget(stateKeys.begin(), stateKeys.end(), std::back_inserter(stateValues));
+
+        std::vector<std::string> states;
+        for (const auto & x : stateValues) {
+            if (!x) {
+                continue;
+            }
+            states.push_back(*x);
+        }
+
+        // {
+        //      std::string s;
+        //      for (const auto &x : states) {
+        //          s += x + ", ";
+        //      }
+        //      LOG(debug) << " states = " << s;
+        // }
+
+        for (const auto &w : waitStateTargets) {
+            if (std::all_of(states.begin(), states.end(), [&w](const auto &x) {
+            return x == w;
+        })) {
+                done = true;
+                break;
+            }
+        }
+        std::this_thread::sleep_for(100ms);
+    }
+}
+
+//_____________________________________________________________________________
+void WebGui::Wait(const std::unordered_set<std::string> &services, const std::unordered_set<std::string> &instances, const std::vector<std::string> &waitStateTargets)
+{
+
+    if (services.count("all")>0) {
+        Wait({daq::service::join({"*", "*"}, fSeparator)}, waitStateTargets);
+    } else if (instances.count("all")>0) {
+        for (const auto &service : services) {
+            Wait({daq::service::join({service, "*"}, fSeparator)}, waitStateTargets);
+        }
+    } else {
+        std::vector<std::string> keys;
+        std::transform(instances.begin(), instances.end(), std::back_inserter(keys), [](const auto &x) {
+            return x;
+        });
+        Wait(keys, waitStateTargets);
+    }
+    // LOG(debug) << "Wait done";
+    return;
 }

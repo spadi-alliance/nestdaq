@@ -34,7 +34,6 @@ target_include_directories(${PLUGIN} PRIVATE
 
 target_link_libraries(${PLUGIN}
   ${CMAKE_THREAD_LIBS_INIT};
-  ${fmt_LIB};
   ${HIREDIS_LIB};
   ${REDIS_PLUS_PLUS_LIB};
 )
@@ -62,7 +61,6 @@ target_include_directories(${PLUGIN} PRIVATE
 
 target_link_libraries(${PLUGIN}
   ${CMAKE_THREAD_LIBS_INIT};
-  ${fmt_LIB};
   ${HIREDIS_LIB};
   ${REDIS_PLUS_PLUS_LIB};
 )
@@ -87,7 +85,6 @@ target_include_directories(${PLUGIN} PRIVATE
 
 target_link_libraries(${PLUGIN}
   ${CMAKE_THREAD_LIBS_INIT};
-  ${fmt_LIB};
   ${HIREDIS_LIB};
   ${REDIS_PLUS_PLUS_LIB};
 )

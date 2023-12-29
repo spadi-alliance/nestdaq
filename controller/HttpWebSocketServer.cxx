@@ -6,7 +6,6 @@
 #include "controller/listener.h"
 #include "controller/HttpWebSocketServer.h"
 
-
 //_____________________________________________________________________________
 HttpWebSocketServer::HttpWebSocketServer(int nThreads)
     : fContext(std::make_shared<net::io_context>(nThreads)) // The io_context is required for all I/O

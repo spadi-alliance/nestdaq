@@ -3,9 +3,11 @@
 
 // Parameter configuration plugin using Redis
 
+#include <atomic>
 #include <cmath>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -43,6 +45,8 @@ private:
     std::string fSeparator;
     std::string fKey;
     std::string fGroupKey;
+    std::thread fSubscriberThread;
+    std::atomic<bool> fPluginShutdownRequested{false};
 
     bool IsReservedOption(std::string_view name) const;
     void Parse(std::string_view name, std::string line);
@@ -89,6 +93,7 @@ private:
             SetProperty<T>(name.data(), v);
         }
     }
+    void SubscribeToParameterChange();
     void ToArray(std::string_view name, std::string line);
     void ToMap(std::string_view name, std::string line);
 };
