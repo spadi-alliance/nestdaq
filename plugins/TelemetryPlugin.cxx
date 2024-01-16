@@ -75,7 +75,7 @@ void TelemetryPlugin::OutputToConsole(const std::string &content, const fair::Lo
     std::ostringstream timestamp;
     {
         const auto lt = std::localtime(&metadata.timestamp);
-        timestamp << std::put_time(lt, "%H:%M:%S") << ":" << std::setw(6) << std::setfill('0') << metadata.us.count();
+        timestamp << std::put_time(lt, "%H:%M:%S") << "." << std::setw(6) << std::setfill('0') << metadata.us.count();
     }
 
     //std::timespec ts;
