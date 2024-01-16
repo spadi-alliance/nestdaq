@@ -92,10 +92,32 @@ target_link_libraries(${PLUGIN}
 set_target_properties(${PLUGIN} PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 #==============================================================================
+# Telemetry plugin
+set(PLUGIN FairMQPlugin_telemetry)
+add_library(${PLUGIN} SHARED
+  TelemetryPlugin.cxx;
+  tools.cxx;
+)
+
+target_include_directories(${PLUGIN} PRIVATE
+  ${Boost_INCLUDE_DIRS};
+  ${FairLogger_INCDIR};
+  ${FairMQ_INCDIR};
+  ${CMAKE_SOURCE_DIR};
+)
+
+target_link_libraries(${PLUGIN}
+  ${CMAKE_THREAD_LIBS_INIT};
+)
+
+set_target_properties(${PLUGIN} PROPERTIES CXX_VISIBILITY_PRESET hidden)
+
+#==============================================================================
 install(TARGETS
   FairMQPlugin_daq_service; 
   FairMQPlugin_metrics;
   FairMQPlugin_parameter_config;
+  FairMQPlugin_telemetry;
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

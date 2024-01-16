@@ -14,6 +14,6 @@ int ParseCommandLine(int argc, char* argv[],
                      boost::program_options::variables_map& vm);
 
 boost::property_tree::ptree to_json(std::string_view s);
-std::string to_string(const boost::property_tree::ptree& obj);
+std::string to_string(const boost::property_tree::ptree& obj, bool pretty=true);
 
 #endif

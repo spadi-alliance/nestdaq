@@ -38,55 +38,55 @@ bpo::options_description MakeOption()
     bpo::options_description redisOptions("redis options");
     bpo::options_description logOptions("log options");
     wsOptions.add_options()
-             //
-             //
-             ("http-uri",  bpo::value<std::string>()->default_value("http://0.0.0.0:8080"), "http server URI. (scheme://address:port)")
-             //
-             ("threads", bpo::value<unsigned int>()->default_value(1), "number of threads for http server")
-             //
-             ("doc-root", bpo::value<std::string>()->default_value(std::string(DefaultDocRootPath.data())), "Directory of the document root, which is the starting point when looking for html")
-             //
-             ("pre-run", bpo::value<std::string>()->default_value("echo \"pre-run command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing RUN command")
-             //
-             ("post-run", bpo::value<std::string>()->default_value("echo \"post-run command\""), "Path to a script file (starting with shebang) or a comamnd line to execute after publishing RUN command")
-             //
-             ("pre-stop", bpo::value<std::string>()->default_value("echo \"pre-stop command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing STOP command")
-             //
-             ("post-stop", bpo::value<std::string>()->default_value("echo \"post-stop command\""), "Path to the script file (starting with shebang) or a comamnd line to execute after publishing STOP command");
+    //
+    //
+    ("http-uri",  bpo::value<std::string>()->default_value("http://0.0.0.0:8080"), "http server URI. (scheme://address:port)")
+    //
+    ("threads", bpo::value<unsigned int>()->default_value(1), "number of threads for http server")
+    //
+    ("doc-root", bpo::value<std::string>()->default_value(std::string(DefaultDocRootPath.data())), "Directory of the document root, which is the starting point when looking for html")
+    //
+    ("pre-run", bpo::value<std::string>()->default_value("echo \"pre-run command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing RUN command")
+    //
+    ("post-run", bpo::value<std::string>()->default_value("echo \"post-run command\""), "Path to a script file (starting with shebang) or a comamnd line to execute after publishing RUN command")
+    //
+    ("pre-stop", bpo::value<std::string>()->default_value("echo \"pre-stop command\""), "Path to a script file (starting with shebang) or a command line to execute before publishing STOP command")
+    //
+    ("post-stop", bpo::value<std::string>()->default_value("echo \"post-stop command\""), "Path to the script file (starting with shebang) or a comamnd line to execute after publishing STOP command");
 
     redisOptions.add_options()
-                //
-                ("redis-uri", bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379"), "URI of redis-server")
-                //
-                ("separator", bpo::value<std::string>()->default_value(":"), "namespace separator for redis keys")
-                //
-                ("save-command", bpo::value<std::string>()->default_value("save"), "redis rdb save command. (\"save\" or \"bgsave\")")
-                //
-                ("rdb-dir", bpo::value<std::string>(), "directory for redis rdb")
-                //
-                ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond")
-                //
-                ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format");
+    //
+    ("redis-uri", bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379"), "URI of redis-server")
+    //
+    ("separator", bpo::value<std::string>()->default_value(":"), "namespace separator for redis keys")
+    //
+    ("save-command", bpo::value<std::string>()->default_value("save"), "redis rdb save command. (\"save\" or \"bgsave\")")
+    //
+    ("rdb-dir", bpo::value<std::string>(), "directory for redis rdb")
+    //
+    ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond")
+    //
+    ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format");
 
     logOptions.add_options()
-              //
-              ("log-to-file", bpo::value<std::string>()->default_value(""), "FairLogger Log output to a file")
-              //
-              ("file-severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (file) : trace, debug, info, state, warn, error, fatal, nolog")
-              //
-              ("severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (console): trace, debug, info, state, warn, error, fatal, nolog")
-              //
-              ("verbosity", bpo::value<std::string>()->default_value("medium"), "FairLogger Log verbosity level: veryhigh, high, medium, low")
-              //
-              ("color", bpo::value<bool>()->default_value(true), "FairLogger Log color (true/false)");
+    //
+    ("log-to-file", bpo::value<std::string>()->default_value(""), "FairLogger Log output to a file")
+    //
+    ("file-severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (file) : trace, debug, info, state, warn, error, fatal, nolog")
+    //
+    ("severity", bpo::value<std::string>()->default_value("info"), "FairLogger Log severity level (console): trace, debug, info, state, warn, error, fatal, nolog")
+    //
+    ("verbosity", bpo::value<std::string>()->default_value("medium"), "FairLogger Log verbosity level: veryhigh, high, medium, low")
+    //
+    ("color", bpo::value<bool>()->default_value(true), "FairLogger Log color (true/false)");
 
     options.add_options()
-           //
-           ("help,h", "print this help");
+    //
+    ("help,h", "print this help");
 
     options.add(wsOptions)
-           .add(redisOptions)
-           .add(logOptions);
+    .add(redisOptions)
+    .add(logOptions);
     return options;
 }
 

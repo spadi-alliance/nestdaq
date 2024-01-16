@@ -74,43 +74,43 @@ auto PluginProgramOptions() -> fair::mq::Plugin::ProgOptions
     LOG(debug) << "daq::service::PluginProgramOptions: add_options";
     auto pluginOptions = bpo::options_description(MyClass.data());
     pluginOptions.add_options() //
-                 (ServiceName.data(),        bpo::value<std::string>(),  "name of this service")
-                 //
-                 (Uuid.data(),               bpo::value<std::string>(),  "uuid of this service")
-                 //
-                 (HostIpAddress.data(),      bpo::value<std::string>(),  "IP address or hostname of this service")
-                 //
-                 (Hostname.data(),           bpo::value<std::string>(),  "hostname of this service")
-                 //
-                 (ServiceRegistryUri.data(), bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379/0"), "DAQ service registry's URI")
-                 //
-                 (Separator.data(),          bpo::value<std::string>()->default_value(":"), "separator character for key space name")
-                 //
-                 (MaxTtl.data(),             bpo::value<long long>()->default_value(5), "max TTL (time-to-live) in second for keys")
-                 //
-                 (TtlUpdateInterval.data(),  bpo::value<long long>()->default_value(3), "TTL update interval in second for keys")
-                 //
-                 (StartupState.data(),       bpo::value<std::string>()->default_value("idle"),
-                  "state on startup. (idle, initializing-device, initialized, bound, device-ready, ready, running)")
-                 //
-                 (EnableUds.data(),          bpo::value<std::string>()->default_value("true"),
-                  "Use Unix Domain Socket for the local IPC if available (bool)")
-                 //
-                 (ConnectConfig.data(),          bpo::value<std::string>(),
-                  "MQ channel parameters of JSON string for temporary connection with method=connect\n"
-                  " '{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\n\n"
-                  " NOTE: When using start_device.sh, the JSON string must be enclosed in \\' (backslash + single quote)\n"
-                  " \\''{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\\'\n\n"
-                  " e.g. 1 \n"
-                  " '{ \"in\": { \"type\": \"pull\", \"peer\": \"Sampler:out\" } }'\n"
-                  " e.g. 2 \n"
-                  " '{ \"in\": { \"type\": \"pill\",  \"peer\": \"Sampler-0:out\" } }'\n"
-                  " e.g. 3 \n"
-                  " '{ \"in\": {\"type\": \"sub\", \"peer\": [ \"Sampler:Sampler-0:out[0]\", \"Sampler:Sampler-1:out[1]\" ] } }'\n"
-                  " e.g. 4 \n"
-                  " '{ \"in\": {\"type\": \"sub\", \"peer\": \"Sampler:Sampler-0:out[0]\" }, \"out\": { \"type\": \"pub\",  \"peer\": \"Sink:Sink-2:in[1]\" } }'\n")
-                 //
-                 (MaxRetryToResolveAddress.data(), bpo::value<std::string>()->default_value("10"), "max retry to resolve connect address");
+    (ServiceName.data(),        bpo::value<std::string>(),  "name of this service")
+    //
+    (Uuid.data(),               bpo::value<std::string>(),  "uuid of this service")
+    //
+    (HostIpAddress.data(),      bpo::value<std::string>(),  "IP address or hostname of this service")
+    //
+    (Hostname.data(),           bpo::value<std::string>(),  "hostname of this service")
+    //
+    (ServiceRegistryUri.data(), bpo::value<std::string>()->default_value("tcp://127.0.0.1:6379/0"), "DAQ service registry's URI")
+    //
+    (Separator.data(),          bpo::value<std::string>()->default_value(":"), "separator character for key space name")
+    //
+    (MaxTtl.data(),             bpo::value<long long>()->default_value(5), "max TTL (time-to-live) in second for keys")
+    //
+    (TtlUpdateInterval.data(),  bpo::value<long long>()->default_value(3), "TTL update interval in second for keys")
+    //
+    (StartupState.data(),       bpo::value<std::string>()->default_value("idle"),
+     "state on startup. (idle, initializing-device, initialized, bound, device-ready, ready, running)")
+    //
+    (EnableUds.data(),          bpo::value<std::string>()->default_value("true"),
+     "Use Unix Domain Socket for the local IPC if available (bool)")
+    //
+    (ConnectConfig.data(),          bpo::value<std::string>(),
+     "MQ channel parameters of JSON string for temporary connection with method=connect\n"
+     " '{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\n\n"
+     " NOTE: When using start_device.sh, the JSON string must be enclosed in \\' (backslash + single quote)\n"
+     " \\''{ \"my-channel-a\": { parameters-a }, \"my-channel-b\":  { parameters-b } }'\\'\n\n"
+     " e.g. 1 \n"
+     " '{ \"in\": { \"type\": \"pull\", \"peer\": \"Sampler:out\" } }'\n"
+     " e.g. 2 \n"
+     " '{ \"in\": { \"type\": \"pill\",  \"peer\": \"Sampler-0:out\" } }'\n"
+     " e.g. 3 \n"
+     " '{ \"in\": {\"type\": \"sub\", \"peer\": [ \"Sampler:Sampler-0:out[0]\", \"Sampler:Sampler-1:out[1]\" ] } }'\n"
+     " e.g. 4 \n"
+     " '{ \"in\": {\"type\": \"sub\", \"peer\": \"Sampler:Sampler-0:out[0]\" }, \"out\": { \"type\": \"pub\",  \"peer\": \"Sink:Sink-2:in[1]\" } }'\n")
+    //
+    (MaxRetryToResolveAddress.data(), bpo::value<std::string>()->default_value("10"), "max retry to resolve connect address");
 
     return pluginOptions;
 }
@@ -230,8 +230,16 @@ Plugin::Plugin(std::string_view name,
             auto stateName = GetStateName(newState);
             LOG(info) << MyClass << " state : " << stateName;
             fStateQueue.Push(newState);
-            fClient->hset(fHealth->key, "fair:mq:state", stateName);
-            fClient->set(fFairMQStateKey, stateName);
+
+            {
+                std::lock_guard<std::mutex> lock{fMutex};
+                auto pipe = fClient->pipeline();
+                pipe.setex(fFairMQStateKey, fMaxTtl, stateName)
+                .hset(fHealth->key, "fair:mq:state", stateName)
+                .expire(fHealth->key, fMaxTtl);
+                pipe.exec();
+            }
+
             WriteProgOptions();
             ReadRunNumber();
             const auto& v = boost::to_lower_copy(GetProperty<std::string>(EnableUds.data()));
@@ -1066,7 +1074,9 @@ void Plugin::Unregister()
 //_____________________________________________________________________________
 void Plugin::WriteProgOptions()
 {
-    fClient->hset(fProgOptionKeyName,
+    std::lock_guard<std::mutex> lock{fMutex};
+    auto pipe = fClient->pipeline();
+    pipe.hset(fProgOptionKeyName,
     {   std::make_pair("severity",            GetProperty<std::string>("severity")),
         std::make_pair("file-severity",       GetProperty<std::string>("file-severity")),
         std::make_pair("verbosity",           GetProperty<std::string>("verbosity")),
@@ -1086,8 +1096,8 @@ void Plugin::WriteProgOptions()
         std::make_pair("ofi-size-hint",       std::to_string(GetProperty<std::size_t>("ofi-size-hint"))),
         std::make_pair("rate",                std::to_string(GetProperty<float>("rate"))),
         std::make_pair("session",             GetProperty<std::string>("session")),
-    });
-    fClient->expire(fProgOptionKeyName, fMaxTtl);
+    })
+    .expire(fProgOptionKeyName, fMaxTtl);
 }
 //_____________________________________________________________________________
 void Plugin::WriteStartTime()

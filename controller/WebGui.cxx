@@ -691,26 +691,26 @@ void WebGui::SubscribeToRedisPubSub()
 //_____________________________________________________________________________
 void WebGui::Wait(const std::vector<std::string> &keys, const std::vector<std::string>& waitStateTargets)
 {
-    std::unordered_set<std::string> stateKeys;
-    for (const auto &k : keys) {
-        auto s = daq::service::scan(*fClient, {daq::service::TopPrefix.data(), k, daq::service::FairMQStatePrefix.data()}, fSeparator);
-        stateKeys.merge(s);
-    }
-
-    if (stateKeys.empty()) {
-        return;
-    }
-
-    // {
-    //     std::string k;
-    //     for (const auto &x : stateKeys) {
-    //         k += x + ", ";
-    //     }
-    //     LOG(debug) << " stateKeys = " << k;
-    // }
-
     bool done{false};
     while (!done) {
+        std::unordered_set<std::string> stateKeys;
+        for (const auto &k : keys) {
+            auto s = daq::service::scan(*fClient, {daq::service::TopPrefix.data(), k, daq::service::FairMQStatePrefix.data()}, fSeparator);
+            stateKeys.merge(s);
+        }
+
+        if (stateKeys.empty()) {
+            return;
+        }
+
+        // {
+        //     std::string k;
+        //     for (const auto &x : stateKeys) {
+        //         k += x + ", ";
+        //     }
+        //     LOG(debug) << " stateKeys = " << k;
+        // }
+
         std::vector<sw::redis::OptionalString> stateValues;
         fClient->mget(stateKeys.begin(), stateKeys.end(), std::back_inserter(stateValues));
 

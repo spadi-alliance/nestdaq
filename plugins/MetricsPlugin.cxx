@@ -130,11 +130,11 @@ auto daq::service::MetricsPluginProgramOptions() -> fair::mq::Plugin::ProgOption
 
     auto options = bpo::options_description(MyClass.data());
     options.add_options()
-           (opt::UpdateInterval.data(), bpo::value<long long>()->default_value(1000),     "update interval in milliseconds for CPU and memory usage.")
-           (opt::ServerUri.data(),      bpo::value<std::string>(),                        "Redis server URI (if empty, the same URI of the service registry is used.)")
-           (opt::Retention.data(),      bpo::value<std::string>()->default_value("0"),    "Retention time in msec for time series data. When set to 0, the series is not trimmed at all.")
-           (opt::RecreateTS.data(),     bpo::value<std::string>()->default_value("true"), "Recreate timeseries data on state transition to Running")
-           (opt::MaxTtl.data(),         bpo::value<std::string>()->default_value("3000"), "Max TTL for metrics in milliseconds. (if zero or negative, no TTL is set.)");
+    (opt::UpdateInterval.data(), bpo::value<long long>()->default_value(1000),     "update interval in milliseconds for CPU and memory usage.")
+    (opt::ServerUri.data(),      bpo::value<std::string>(),                        "Redis server URI (if empty, the same URI of the service registry is used.)")
+    (opt::Retention.data(),      bpo::value<std::string>()->default_value("0"),    "Retention time in msec for time series data. When set to 0, the series is not trimmed at all.")
+    (opt::RecreateTS.data(),     bpo::value<std::string>()->default_value("true"), "Recreate timeseries data on state transition to Running")
+    (opt::MaxTtl.data(),         bpo::value<std::string>()->default_value("3000"), "Max TTL for metrics in milliseconds. (if zero or negative, no TTL is set.)");
     return options;
 }
 
