@@ -14,9 +14,9 @@ void addCustomOptions(bpo::options_description &options)
 {
     using opt = Sink::OptionKey;
     options.add_options()
-           (opt::InputChannelName.data(), bpo::value<std::string>()->default_value(opt::InputChannelName.data()), "Name of input channel\n")
-           //
-           (opt::Multipart.data(), bpo::value<std::string>()->default_value("true"), "Handle multipart message\n");
+    (opt::InputChannelName.data(), bpo::value<std::string>()->default_value(opt::InputChannelName.data()), "Name of input channel\n")
+    //
+    (opt::Multipart.data(), bpo::value<std::string>()->default_value("true"), "Handle multipart message\n");
 }
 
 //_____________________________________________________________________________

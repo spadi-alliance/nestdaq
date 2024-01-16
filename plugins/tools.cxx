@@ -88,9 +88,9 @@ boost::property_tree::ptree to_json(std::string_view s)
 }
 
 //_____________________________________________________________________________
-std::string to_string(const boost::property_tree::ptree& pt)
+std::string to_string(const boost::property_tree::ptree& pt, bool pretty)
 {
     std::ostringstream oss;
-    boost::property_tree::write_json(oss, pt);
+    boost::property_tree::write_json(oss, pt, pretty);
     return oss.str();
 }

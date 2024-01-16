@@ -72,7 +72,7 @@ auto ParameterConfigPluginProgramOptions() -> fair::mq::Plugin::ProgOptions
     using opt = ParameterConfigPlugin::OptionKey;
     auto options = bpo::options_description(MyClass.data());
     options.add_options()
-           (opt::ServerUri.data(), bpo::value<std::string>(), "Redis server URI (if empty, the same URI of the service registry is used.)");
+    (opt::ServerUri.data(), bpo::value<std::string>(), "Redis server URI (if empty, the same URI of the service registry is used.)");
     return options;
 }
 
@@ -376,17 +376,18 @@ void ParameterConfigPlugin::SubscribeToParameterChange()
     const auto dbNumber = serverUri.substr(serverUri.find_last_of("/")+1);
     LOG(debug) << " db number = " << dbNumber;
     const std::string redisKeySpaceNotificationChannel = RedisKeySpacePrefix.data() + dbNumber + "__:"s + fKey;
-    LOG(debug) << " key-space-notification channel = " << redisKeySpaceNotificationChannel;
+    const std::string redisKeySpaceNotificationGroupChannel = RedisKeySpacePrefix.data() + dbNumber + "__:"s + fGroupKey;
+    LOG(debug) << " key-space-notification channel = " << redisKeySpaceNotificationChannel << ", " << redisKeySpaceNotificationGroupChannel;
 
-    sub.on_message([this, &redisKeySpaceNotificationChannel](auto channel, auto msg) {
+    sub.on_message([this, &redisKeySpaceNotificationChannel, &redisKeySpaceNotificationGroupChannel](auto channel, auto msg) {
         //LOG(debug) << MyClass << " on_message(MESSAGE): channel = " << channel << " msg = " << msg;
-        if (redisKeySpaceNotificationChannel!=channel) {
+        if (redisKeySpaceNotificationChannel!=channel && redisKeySpaceNotificationGroupChannel!=channel) {
             return;
         }
         ReadParameters();
     });
 
-    sub.subscribe(redisKeySpaceNotificationChannel);
+    sub.subscribe({redisKeySpaceNotificationChannel, redisKeySpaceNotificationGroupChannel});
 
     while (!fPluginShutdownRequested) {
         try {
