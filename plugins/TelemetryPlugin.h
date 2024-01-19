@@ -32,7 +32,6 @@ private:
     std::string fId;
     std::string fServiceName;
     std::string fSeverity;
-    std::mutex  fMutex;
 
     void OutputToConsole(const std::string &content, const fair::LogMetaData &metadata);
 
