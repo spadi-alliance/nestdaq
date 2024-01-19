@@ -99,12 +99,7 @@ void TelemetryPlugin::OutputToConsole(const std::string &content, const fair::Lo
     //obj.put("tv_nsec", ts.tv_nsec);
 
     // pretty = false -> single line
-    const auto& s = to_string(obj, false);
-
-    {
-        std::lock_guard<std::mutex> lock{fMutex};
-        std::cout << s << std::endl;
-    }
+    std::cout << to_string(obj, false) << std::endl;
 }
 
 }

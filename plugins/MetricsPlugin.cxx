@@ -670,7 +670,7 @@ daq::service::ProcStat_t daq::service::MetricsPlugin::ReadProcStat()
 //_____________________________________________________________________________
 void daq::service::MetricsPlugin::SendProcessMetrics()
 {
-    //LOG(debug) << MyClass << " " << __FUNCTION__;
+    //std::cout << MyClass << " " << __FUNCTION__;
 
     auto nowProcSelfStat = ReadProcSelfStat();
     auto nowProcStat     = ReadProcStat();
@@ -683,7 +683,7 @@ void daq::service::MetricsPlugin::SendProcessMetrics()
     // memory usage in MiB
     auto ramUsage = static_cast<double>(nowProcSelfStat.rss) * fPageSize / 1024/1024;
 
-//  LOG(debug) << " diff (self) = " << diffSelf
+//  std::cout << " diff (self) = " << diffSelf
 //             << ", diff (all) = " << diffAll << "\n"
 //             << "cpu = " << cpuUsage
 //             << ", memory = " << ramUsage;
@@ -708,11 +708,11 @@ void daq::service::MetricsPlugin::SendProcessMetrics()
             //          << "\n " << fTsProcKey.stateId   << "\t " << stateId << std::endl;
         }
     } catch (const std::exception& e) {
-        LOG(error) << MyClass << " " << __FUNCTION__ << " exception : what() " << e.what();
+        std::cerr << MyClass << " " << __FUNCTION__ << " exception : what() " << e.what();
     } catch (...) {
-        LOG(error) << MyClass << " " << __FUNCTION__ << " exception : unknown ";
+        std::cerr << MyClass << " " << __FUNCTION__ << " exception : unknown ";
     }
-    //LOG(debug) << MyClass << " " << __FUNCTION__ << " done";
+    //std::cout << MyClass << " " << __FUNCTION__ << " done";
 }
 
 //_____________________________________________________________________________
@@ -853,10 +853,8 @@ void daq::service::MetricsPlugin::SendSocketMetrics(const std::string &content)
         //std::cout << __LINE__ << " no pipeline is created " << std::endl;
         //}
     } catch (const std::exception &e) {
-        LOG(error) << MyClass << " " << __FUNCTION__ << " exception : what() = " << e.what();
+        std::cerr << MyClass << " " << __FUNCTION__ << " exception : what() = " << e.what();
     } catch (...) {
-        LOG(error) << MyClass << " " << __FUNCTION__ << " exception : unknown";
+        std::cerr << MyClass << " " << __FUNCTION__ << " exception : unknown";
     }
-
-    LOG(debug) << MyClass << " " << __FUNCTION__ << " done";
 }
