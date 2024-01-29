@@ -11,7 +11,7 @@ if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   add_compile_options(-fdiagnostics-color=always)
 elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
   message("turn on colored error message of Clang")
-  add_compiler_options(-fcolor-diagnostics)
+  add_compile_options(-fcolor-diagnostics)
 endif()
 
 #------------------------------------------------------------------------------
