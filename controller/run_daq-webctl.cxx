@@ -27,7 +27,7 @@ namespace bpo = boost::program_options;
 using namespace std::string_literals;
 
 std::mutex wsMutex;
-std::unordered_map<unsigned int, std::shared_ptr<websocket_session>> wsSessions;
+std::unordered_map<unsigned int, std::pair<std::shared_ptr<websocket_session>, std::string>> wsSessions;
 std::unique_ptr<WebGui> daqControl;
 
 //_____________________________________________________________________________
@@ -60,13 +60,7 @@ bpo::options_description MakeOption()
     //
     ("separator", bpo::value<std::string>()->default_value(":"), "namespace separator for redis keys")
     //
-    ("save-command", bpo::value<std::string>()->default_value("save"), "redis rdb save command. (\"save\" or \"bgsave\")")
-    //
-    ("rdb-dir", bpo::value<std::string>(), "directory for redis rdb")
-    //
-    ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond")
-    //
-    ("dbfilename-format", bpo::value<std::string>()->default_value("run{:06}.rdb"), "rdb file name format");
+    ("poll-interval", bpo::value<uint64_t>()->default_value(500), "state polling interval in millisecond");
 
     logOptions.add_options()
     //
@@ -157,25 +151,19 @@ int main(int argc, char* argv[])
 
     daqControl = std::make_unique<WebGui>();
 
-    if (vm.count("rdb-dir")>0) {
-        daqControl->SetDBDir(vm["rdb-dir"].as<std::string>());
-        daqControl->SetDBFileNameFormat(vm["dbfilename-format"].as<std::string>());
-        daqControl->SetSaveCommand(vm["save-command"].as<std::string>());
-    }
     daqControl->SetPollIntervalMS(vm["poll-interval"].as<uint64_t>());
     if (!daqControl->ConnectToRedis(redisUri, channel, sep)) {
         return EXIT_FAILURE;
     }
     // ============================================
-    daqControl->SetSendFunction([](auto connid, const auto& arg) {
-        const auto &websocketIdList = daqControl->GetWebSocketIdList();
-        if (websocketIdList.empty()) {
-            LOG(info) << " no websocket clients";
+    daqControl->SetSendFunction([&wsSessions](auto connid, const auto& arg) {
+        if (wsSessions.empty()) {
+            LOG(debug) << " no websocket clients";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             return;
         }
         if (connid==0) { // broadcast message to registered clients
-            for (const auto& [i, t] : websocketIdList) {
+            for (const auto& [i, t] : wsSessions) {
                 LOG(debug) << "Send message to websocket client id = " << i << ", msg = " << arg;
                 Write(i, arg);
             }
@@ -215,24 +203,37 @@ int main(int argc, char* argv[])
 //_____________________________________________________________________________
 void OnClose(unsigned int id)
 {
+    std::vector<std::pair<unsigned int, std::string>> v;
     {
         std::lock_guard<std::mutex> lock{wsMutex};
         wsSessions.erase(id);
+        for (const auto& [i, t] : wsSessions) {
+            v.push_back(std::make_pair(i, t.second));
+        }
     }
-    daqControl->ProcessData(id, R"({ "command": "ON_CLOSED" })");
-    LOG(debug) << __func__ << " websocket id = " << id << " done";
+    daqControl->SendWebSocketIdList(v);
+    LOG(info) << __func__ << " websocket id = " << id << " done";
 }
 
 //_____________________________________________________________________________
 void OnConnect(const std::shared_ptr<websocket_session> &session)
 {
-    auto id = session->id();
+    unsigned int id{0};
+    std::string msg{"My WebSocket Connection ID: "};
+    auto d = date();
+    std::vector<std::pair<unsigned int, std::string>> v;
     {
         std::lock_guard<std::mutex> lock{wsMutex};
-        wsSessions.emplace(id, session);
+        id = session->id();
+        msg += std::to_string(id) + " (Date: " + d + ")";
+        wsSessions.emplace(id, std::make_pair(session, d));
+        for (const auto& [i, t] : wsSessions) {
+            v.push_back(std::make_pair(i, t.second));
+        }
     }
-    daqControl->ProcessData(id, R"({ "command": "ON_CONNECT" })");
-    LOG(trace) << __func__ << " websocket id = " << id << " done";
+    daqControl->Send(id, msg.data());
+    daqControl->SendWebSocketIdList(v);
+    LOG(info) << __func__ << " websocket id = " << id << " done";
 }
 
 //_____________________________________________________________________________
@@ -250,12 +251,7 @@ void OnRead(unsigned int id, const std::vector<char>& message)
 //_____________________________________________________________________________
 void Write(unsigned int id, const std::string& message)
 {
-
-    std::shared_ptr<websocket_session> session;
-    {
-        std::lock_guard<std::mutex> lock{wsMutex};
-        session = wsSessions[id];
-    }
+    auto &[session, d] = wsSessions[id];
     if (session) {
         session->write(message);
     }

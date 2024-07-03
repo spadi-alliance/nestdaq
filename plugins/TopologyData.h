@@ -28,6 +28,7 @@ struct SocketProperty {
     // Following fields are used by TopologyConfig.
     bool autoSubChannel{false};
     bool bound{false};
+    bool waitForPeerConnection{true};
 };
 
 struct LinkProperty {

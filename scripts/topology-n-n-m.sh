@@ -29,10 +29,10 @@ echo "---------------------------------------------------------------------"
 #---------------------------------------------------------------------------
 
 # Sampler 
-endpoint     Sampler        data           type push  method bind
+endpoint     Sampler        data           type push  method bind    autoSubChannel false
 
 # splitter
-endpoint     fairmq-splitter data-in       type pull method connect 
+endpoint     fairmq-splitter data-in       type pull method connect  autoSubChannel false
 endpoint     fairmq-splitter data-out      type push method bind     autoSubChannel true
 
 # Sink

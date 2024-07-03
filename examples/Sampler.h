@@ -16,9 +16,12 @@ public:
     ~Sampler() override = default;
 
 protected:
+    std::string fId;
+    std::string fOutputChannelName;
     std::string fText;
     uint64_t fMaxIterations;
     uint64_t fNumIterations;
+    int fNumSubChannels;
 
     void Init() override;
     void InitTask() override;

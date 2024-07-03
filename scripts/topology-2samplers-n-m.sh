@@ -31,10 +31,11 @@ echo "---------------------------------------------------------------------"
 #---------------------------------------------------------------------------
 
 # Sampler 
-endpoint     Sampler        data           type push  method bind  autoSubChannel false
+endpoint     A-Sampler        data           type push  method bind  autoSubChannel true
+endpoint     B-Sampler        data           type push  method bind  autoSubChannel true
 
 # Sink
-endpoint     Sink          in              type pull  method connect autoSubChannel false
+endpoint     Sink          in              type pull  method connect autoSubChannel true
 
 
 echo "---------------------------------------------------------------------"
@@ -44,4 +45,5 @@ echo "---------------------------------------------------------------------"
 #       service1         channel1        service2     channel2      
 #---------------------------------------------------------------------------
 
-link    Sampler          data            Sink         in
+link    A-Sampler          data            Sink         in
+link    B-Sampler          data            Sink         in
