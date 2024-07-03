@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 // #include <boost/json.hpp> boost.json with gcc8 has a bug
 #include <boost/property_tree/ptree.hpp>
@@ -49,9 +50,6 @@ public:
         fFuncList.insert(table.cbegin(), table.cend());
     }
 
-    // update the list of the client's connection id
-    void AddWebSocketId(unsigned int connid);
-
     bool ConnectToRedis(std::string_view redisUri,
                         std::string_view commandChanenlName,
                         std::string_view separator);
@@ -62,9 +60,6 @@ public:
     const std::string& GetChannelPrefix() const {
         return fChannelName;
     }
-    const std::list<std::pair<unsigned int, std::string>>& GetWebSocketIdList() const  {
-        return fWebSocketIdList;
-    }
     const std::string& GetSeparator() const {
         return fSeparator;
     }
@@ -74,8 +69,6 @@ public:
 
     void InitializeFunctionList();
     void ProcessData(unsigned int connid, const std::string& arg);
-    void RemoveWebSocketId(unsigned int connid);
-    void SaveRDB(const std::string &runNumber);
 
     // send message to the web client/clients
     void Send(unsigned int connid, const std::string& arg) {
@@ -83,14 +76,8 @@ public:
     }
 
     // Send the list of the client's connection id
-    void SendWebSocketIdList();
+    void SendWebSocketIdList(const std::vector<std::pair<unsigned int, std::string>> &v);
 
-    void SetDBDir(std::string_view value) {
-        fDBDir = value.data();
-    }
-    void SetDBFileNameFormat(std::string_view value) {
-        fDBFileNameFormat = value.data();
-    }
     void SetPollIntervalMS(uint64_t t) {
         fPollIntervalMS = t;
     }
@@ -105,9 +92,6 @@ public:
     }
     void SetPreStopCommand(std::string_view value) {
         fPreStopCommand = value.data();
-    }
-    void SetSaveCommand(std::string_view value) {
-        fSaveCommand = value.data();
     }
     void SetSendFunction(std::function<void (unsigned int, const std::string&)> f) {
         fSend = f;
@@ -142,7 +126,6 @@ private:
 
     std::mutex fMutex;
     std::unordered_map<std::string, ProcessDataFunc> fFuncList;
-    std::list<std::pair<unsigned int, std::string>> fWebSocketIdList;
 
     std::function<void (unsigned int, const std::string&)> fSend;
     std::function<void (void)> fTerminate;
@@ -162,9 +145,6 @@ private:
     std::thread fStatePollThread;
     uint64_t fPollIntervalMS{0};
 
-    std::string fDBDir;
-    std::string fDBFileNameFormat;
-    std::string fSaveCommand;
     bool fRecreateTS;
 };
 

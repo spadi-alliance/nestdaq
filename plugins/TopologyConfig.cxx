@@ -26,6 +26,12 @@ static constexpr std::string_view LinkPrefix{"link"};
 static constexpr std::string_view ChannelPrefix{"channel"};
 static constexpr std::string_view PeerPrefix{"peer"};
 static constexpr std::string_view SocketPrefix{"socket"};
+
+static const std::vector<std::string> WaitDeviceReadyTargets {
+    GetStateName(fair::mq::State::DeviceReady),
+    GetStateName(fair::mq::State::Ready),
+    GetStateName(fair::mq::State::Running),
+};
 }
 
 using namespace std::string_literals;
@@ -156,6 +162,9 @@ const daq::service::SocketProperty ToSocketProperty(const Container& c)
         } else if (field=="bound") {
             const auto& v = boost::to_lower_copy(value);
             sp.bound = (v=="1") || (v=="true");
+        } else if (field=="waitForPeerConnection") {
+            const auto& v = boost::to_lower_copy(value);
+            sp.waitForPeerConnection = (v=="1") || (v=="true");
         }
     }
 //  if (sp.autoSubChannel) {
@@ -498,6 +507,59 @@ void daq::service::TopologyConfig::ConfigConnect()
 }
 
 //_____________________________________________________________________________
+auto daq::service::TopologyConfig::GetPeerState(const MQChannel & channels) -> std::map<std::string, std::string>
+{
+    std::unordered_set<std::string> peerKeys;
+    for (const auto &[name, sp] : channels) {
+        for (const auto& [lk, lp] : fLinks) {
+            //LOG(debug) << MyClass << " " << __FUNCTION__ << ":" << __LINE__ << " bind endpoint = " << sp.name
+            //           << ", link property = " << lp.myService << ":" << lp.myChannel
+            //           << ", " << lp.peerService << ":" << lp.peerChannel;
+            if ((fServiceName == lp.myService) && (sp.name == lp.myChannel)) {
+                auto k = join({fTopPrefix, lp.peerService, "*"}, fSeparator);
+                peerKeys.emplace(k);
+            } else if ((fServiceName == lp.peerService) && (sp.name == lp.peerChannel)) {
+                auto k = join({fTopPrefix, lp.myService, "*"}, fSeparator);
+                peerKeys.emplace(k);
+            }
+        }
+    }
+
+
+    std::unordered_set<std::string> stateKeys;
+    auto client = GetClient();
+    for (const auto &k : peerKeys) {
+        //LOG(debug) << " peer key = " << k;
+        auto s = daq::service::scan(*client, {k, daq::service::FairMQStatePrefix.data()}, fSeparator);
+        stateKeys.merge(s);
+    }
+
+    if (stateKeys.empty()) {
+        return {};
+    }
+
+    std::vector<sw::redis::OptionalString> stateValues;
+    client->mget(stateKeys.begin(), stateKeys.end(), std::back_inserter(stateValues));
+
+    std::map<std::string, std::string> result;
+    int i=0;
+    std::stringstream ss;
+    //ss << " scan result\n";
+    for (const auto & k : stateKeys) {
+        const auto & v = stateValues[i];
+        if (v) {
+            //ss << " key = " << k << ", value = " << *v << "\n";
+            // remove the last part ":fairm-mq-state"
+            auto s = k.substr(0, k.find_last_of(':'));
+            result.emplace(s, *v);
+        }
+        ++i;
+    }
+    LOG(debug) << ss.str();
+    return result;
+}
+
+//_____________________________________________________________________________
 void daq::service::TopologyConfig::Initialize()
 {
 //  fNSubscribed = -1;
@@ -699,6 +761,7 @@ void daq::service::TopologyConfig::OnDeviceStateChange(DeviceState newState)
             }
             if (IsCanceled()) break;
             WriteConnectAddress();
+            WaitForPeerConnection();
             break;
         case DeviceState::ResettingDevice:
             Reset();
@@ -1080,7 +1143,7 @@ void daq::service::TopologyConfig::WaitBindAddress()
                 auto k = join({fTopPrefix, lp.peerService, "*", PresencePrefix.data()}, fSeparator);
                 LOG(debug) << MyClass << " " << __FUNCTION__ << ":" << __LINE__ << " : k = " << k;
                 auto presenceKeys = scan(r, {fTopPrefix, lp.peerService, "*", PresencePrefix.data()}, fSeparator);
-                LOG(debug) << __LINE__ << ": n presene: " << presenceKeys.size();
+                LOG(debug) << __LINE__ << ": n presence: " << presenceKeys.size();
                 for (auto &a : presenceKeys) {
                     auto c =  a.substr(0, a.find_last_of(fSeparator));
                     // e.g.: daq_service:peer-service:peer-instance-id:endpoint:peer-chanenl
@@ -1090,7 +1153,7 @@ void daq::service::TopologyConfig::WaitBindAddress()
                 auto k = join({fTopPrefix, lp.myService, "*", PresencePrefix.data()}, fSeparator);
                 LOG(debug) << MyClass << " " << __FUNCTION__ << ":" << __LINE__ << " : k = " << k;
                 auto presenceKeys = scan(r, {fTopPrefix, lp.myService, "*", PresencePrefix.data()}, fSeparator);
-                LOG(debug) << __LINE__ << ": n presene: " << presenceKeys.size();
+                LOG(debug) << __LINE__ << ": n presence: " << presenceKeys.size();
                 for (auto &a : presenceKeys) {
                     auto c = a.substr(0, a.find_last_of(fSeparator));
                     channels.emplace(join({c, topology::ChannelPrefix.data(), lp.myChannel}, fSeparator));
@@ -1115,6 +1178,84 @@ void daq::service::TopologyConfig::WaitBindAddress()
             std::this_thread::sleep_for(1000ms);
         }
     }
+}
+
+//_____________________________________________________________________________
+void daq::service::TopologyConfig::WaitForPeerConnection()
+{
+    LOG(debug) << __FUNCTION__ << " ...";
+    std::unordered_set<std::string> peerKeys;
+    for (const auto &[name, sp] : fBindChannels) {
+        //LOG(debug) << name << " waitForPeerConnection = " << sp.waitForPeerConnection;
+        if (!sp.waitForPeerConnection) {
+            continue;
+        }
+        for (const auto& [lk, lp] : fLinks) {
+            //LOG(debug) << MyClass << " " << __FUNCTION__ << ":" << __LINE__ << " bind endpoint = " << sp.name
+            //           << ", link property = " << lp.myService << ":" << lp.myChannel
+            //           << ", " << lp.peerService << ":" << lp.peerChannel;
+            if ((fServiceName == lp.myService) && (sp.name == lp.myChannel)) {
+                auto k = join({fTopPrefix, lp.peerService, "*"}, fSeparator);
+                peerKeys.emplace(k);
+            } else if ((fServiceName == lp.peerService) && (sp.name == lp.peerChannel)) {
+                auto k = join({fTopPrefix, lp.myService, "*"}, fSeparator);
+                peerKeys.emplace(k);
+            }
+        }
+    }
+
+
+    bool done{false};
+    auto client = GetClient();
+    while (!done && !IsCanceled()) {
+        std::unordered_set<std::string> stateKeys;
+        for (const auto &k : peerKeys) {
+            auto s = daq::service::scan(*client, {k, daq::service::FairMQStatePrefix.data()}, fSeparator);
+            stateKeys.merge(s);
+        }
+
+        if (stateKeys.empty()) {
+            return;
+        }
+
+        // {
+        //     std::string k;
+        //     for (const auto &x : stateKeys) {
+        //         k += x + ", ";
+        //     }
+        //     LOG(debug) << " stateKeys = " << k;
+        // }
+
+        std::vector<sw::redis::OptionalString> stateValues;
+        client->mget(stateKeys.begin(), stateKeys.end(), std::back_inserter(stateValues));
+
+        std::vector<std::string> states;
+        for (const auto & x : stateValues) {
+            if (!x) {
+                continue;
+            }
+            states.push_back(*x);
+        }
+
+        // {
+        //      std::string s;
+        //      for (const auto &x : states) {
+        //          s += x + ", ";
+        //      }
+        //      LOG(debug) << " states = " << s;
+        // }
+
+        for (const auto &w : topology::WaitDeviceReadyTargets) {
+            if (std::all_of(states.begin(), states.end(), [&w](const auto &x) {
+            return x == w;
+        })) {
+                done = true;
+                break;
+            }
+        }
+        std::this_thread::sleep_for(100ms);
+    }
+    LOG(debug) << __FUNCTION__ << " done";
 }
 
 //_____________________________________________________________________________
@@ -1196,23 +1337,24 @@ void daq::service::TopologyConfig::WriteChannel(SocketProperty &sp, const std::v
 
     auto pipe = GetClient()->pipeline();
     pipe.hset(key, {
-        std::make_pair("name",           sp.name),
-        std::make_pair("type",           sp.type),
-        std::make_pair("method",         sp.method),
-        std::make_pair("address",        sp.address),
-        std::make_pair("transport",      sp.transport),
-        std::make_pair("sndBufSize",     std::to_string(sp.sndBufSize)),
-        std::make_pair("rcvBufSize",     std::to_string(sp.rcvBufSize)),
-        std::make_pair("sndKernelSize",  std::to_string(sp.sndKernelSize)),
-        std::make_pair("rcvKernelSize",  std::to_string(sp.rcvKernelSize)),
-        std::make_pair("linger",         std::to_string(sp.linger)),
-        std::make_pair("rateLogging",    std::to_string(sp.rateLogging)),
-        std::make_pair("portRangeMin",   std::to_string(sp.portRangeMin)),
-        std::make_pair("portRangeMax",   std::to_string(sp.portRangeMax)),
-        std::make_pair("autoBind",       std::to_string(sp.autoBind)),
-        std::make_pair("numSockets",     std::to_string(sp.numSockets)),
-        std::make_pair("autoSubChannel", std::to_string(sp.autoSubChannel)),
-        std::make_pair("bound",          std::to_string(sp.bound)),
+        std::make_pair("name",                  sp.name),
+        std::make_pair("type",                  sp.type),
+        std::make_pair("method",                sp.method),
+        std::make_pair("address",               sp.address),
+        std::make_pair("transport",             sp.transport),
+        std::make_pair("sndBufSize",            std::to_string(sp.sndBufSize)),
+        std::make_pair("rcvBufSize",            std::to_string(sp.rcvBufSize)),
+        std::make_pair("sndKernelSize",         std::to_string(sp.sndKernelSize)),
+        std::make_pair("rcvKernelSize",         std::to_string(sp.rcvKernelSize)),
+        std::make_pair("linger",                std::to_string(sp.linger)),
+        std::make_pair("rateLogging",           std::to_string(sp.rateLogging)),
+        std::make_pair("portRangeMin",          std::to_string(sp.portRangeMin)),
+        std::make_pair("portRangeMax",          std::to_string(sp.portRangeMax)),
+        std::make_pair("autoBind",              std::to_string(sp.autoBind)),
+        std::make_pair("numSockets",            std::to_string(sp.numSockets)),
+        std::make_pair("autoSubChannel",        std::to_string(sp.autoSubChannel)),
+        std::make_pair("bound",                 std::to_string(sp.bound)),
+        std::make_pair("waitForPeerConnection", std::to_string(sp.waitForPeerConnection)),
     });
     pipe.expire(key, fMaxTtl);
 

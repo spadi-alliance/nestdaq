@@ -56,6 +56,8 @@ void websocket_session::on_read(beast::error_code ec, std::size_t bytes_transfer
     if(ec) {
         LOG(warn) << "websocket session : " << ec.what();
         fail(ec, "websocket read");
+        OnClose(id_);
+        return;
     }
 
     ws_.text(ws_.got_text());

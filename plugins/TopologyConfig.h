@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -37,6 +38,13 @@ public:
     void EnableUds(bool f=true) {
         fEnableUds = f;
     }
+    auto GetPeerStateOfBindChannels() -> std::map<std::string, std::string> {
+        return GetPeerState(fBindChannels);
+    }
+    auto GetPeerStateOfConnectChannels() -> std::map<std::string, std::string> {
+        return GetPeerState(fConnectChannels);
+    }
+
     void OnDeviceStateChange(DeviceState newState);
     void Reset();
     void ResetTtl(sw::redis::Pipeline& pipe);
@@ -57,6 +65,7 @@ private:
     std::mutex& GetMutex() {
         return fPlugin.GetMutex();
     }
+    auto GetPeerState(const MQChannel & channels) -> std::map<std::string, std::string>;
     std::map<std::string, std::string> GetPropertiesAsStringStartingWith(const std::string& q) const {
         return fPlugin.GetPropertiesAsStringStartingWith(q);
     }
@@ -84,6 +93,7 @@ private:
     }
     void Unregister();
     void WaitBindAddress();
+    void WaitForPeerConnection();
     void WriteAddress(MQChannel &channels, std::function<void (sw::redis::Pipeline&, std::string_view)> f = nullptr);
     void WriteBindAddress();
     void WriteChannel(SocketProperty &sp, const std::vector<std::string> &peers);

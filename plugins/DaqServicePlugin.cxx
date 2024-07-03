@@ -224,6 +224,17 @@ Plugin::Plugin(std::string_view name,
         //fTopology->ConfigConnect();
     }
 
+    // register functions
+    LOG(warn) << " register GetPeerStateOfBindChannels()";
+    SetProperty<std::function<std::map<std::string, std::string>()>>("GetPeerStateOfBindChannels()", [this]() {
+        return fTopology->GetPeerStateOfBindChannels();
+    });
+
+    LOG(warn) << " register GetPeerStaetOfConnectChannels()";
+    SetProperty<std::function<std::map<std::string, std::string>()>>("GetPeerStateOfConnectChannels()", [this]() {
+        return fTopology->GetPeerStateOfConnectChannels();
+    });
+
     LOG(warn) << MyClass << " SubscribeToDeviceStateChange()";
     SubscribeToDeviceStateChange([this](DeviceState newState) {
         try {

@@ -11,6 +11,7 @@ namespace bpo = boost::program_options;
 void addCustomOptions(bpo::options_description& options)
 {
     options.add_options()
+    ("out-chan-name", bpo::value<std::string>()->default_value("data"), "Name of output channel")
     ("text", bpo::value<std::string>()->default_value("Hello"), "Text to send out")
     ("max-iterations", bpo::value<std::string>()->default_value("0"), "Maximum number of iterations of Run/ConditionalRun/OnData (0 - infinite)");
 
@@ -36,9 +37,12 @@ void PrintConfig(const fair::mq::ProgOptions* config, std::string_view name, std
 
 //_____________________________________________________________________________
 Sampler::Sampler()
-    : fText()
+    : fId()
+    , fOutputChannelName()
+    , fText()
     , fMaxIterations(0)
     , fNumIterations(0)
+    , fNumSubChannels(0)
 {
     LOG(debug) << "Sampler : hello";
 }
@@ -68,41 +72,47 @@ void Sampler::InitTask()
     PrintConfig(fConfig, "channel-config", __PRETTY_FUNCTION__);
     PrintConfig(fConfig, "chans.", __PRETTY_FUNCTION__);
 
+    fId = fConfig->GetProperty<std::string>("id");
+    fOutputChannelName = fConfig->GetProperty<std::string>("out-chan-name");
     fText = fConfig->GetProperty<std::string>("text");
     fMaxIterations = std::stoull(fConfig->GetProperty<std::string>("max-iterations"));
+
+    fNumSubChannels = GetNumSubChannels(fOutputChannelName);
 }
 
 //_____________________________________________________________________________
 bool Sampler::ConditionalRun()
 {
-    auto text = new std::string(fConfig->GetProperty<std::string>("id") + ":" + fText + " : " + std::to_string(fNumIterations));
+    for (auto iSubChannel = 0; iSubChannel < fNumSubChannels; ++iSubChannel) {
+        auto text = new std::string(fId + "[" + std::to_string(iSubChannel) + "]:" + fText + " : " + std::to_string(fNumIterations));
 
-    // copy
-    auto txt = *text;
+        // copy
+        auto txt = *text;
 
-    FairMQMessagePtr msg(NewMessage(
-                             const_cast<char*>(text->data()),
-                             text->length(),
-    [](void * /*data*/, void* object) {
-        auto p = reinterpret_cast<std::string*>(object);
-        //LOG(debug) << " sent " << *p;
-        delete p;
-    },
-    text
-                         )
-                        );
+        FairMQMessagePtr msg(NewMessage(
+                                 const_cast<char*>(text->data()),
+                                 text->length(),
+        [](void * /*data*/, void* object) {
+            auto p = reinterpret_cast<std::string*>(object);
+            //LOG(debug) << " sent " << *p;
+            delete p;
+        },
+        text
+                             )
+                            );
 
-    LOG(info) << "Sending \"" << txt << "\"";
+        LOG(info) << "Sending \"" << txt << "\"";
 
-    if (Send(msg, "data") < 0) {
-        LOG(warn) << " event:  " << fNumIterations;
-        return false;
-    } else {
-        ++fNumIterations;
-        if (fMaxIterations > 0 && fNumIterations >= fMaxIterations) {
-            LOG(info) << "Configured maximum number of iterations reached. Leaving RUNNING state. " << fNumIterations << " / " << fMaxIterations;
+        if (Send(msg, fOutputChannelName, iSubChannel) < 0) {
+            LOG(warn) << "failed to send. event:  " << fNumIterations << ", sub channel = " << iSubChannel;
             return false;
         }
+    }
+
+    ++fNumIterations;
+    if (fMaxIterations > 0 && fNumIterations >= fMaxIterations) {
+        LOG(info) << "Configured maximum number of iterations reached. Leaving RUNNING state. " << fNumIterations << " / " << fMaxIterations;
+        return false;
     }
     LOG(info) << " processed events:  " << fNumIterations;
     return true;

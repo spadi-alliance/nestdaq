@@ -85,17 +85,6 @@ std::string GetRedisDBNumber(const std::string& uri)
 }
 
 //_____________________________________________________________________________
-void WebGui::AddWebSocketId(unsigned int connid)
-{
-    auto d = date();
-    fWebSocketIdList.emplace_back(connid, d);
-    std::string msg{"My WebSocket Connection ID: "};
-    msg += std::to_string(connid) + " (Date: " + d + ")";
-    LOG(info) <<  __func__ << " " << msg;
-    Send(connid, msg.data());
-}
-
-//_____________________________________________________________________________
 bool WebGui::ConnectToRedis(std::string_view redisUri,
                             std::string_view commandChannelName,
                             std::string_view separator)
@@ -146,10 +135,6 @@ void WebGui::CopyLatestRunNumber(unsigned int connid)
     name = run_info::Prefix.data() + fSeparator + run_info::LatestRunNumber.data();
     fClient->set(name, *ret);
 
-    if (!fDBDir.empty()) {
-        SaveRDB(*ret);
-    }
-
     boost::property_tree::ptree obj;
     obj.put("type", "set latest_run_number");
     obj.put("value", *ret);
@@ -178,20 +163,16 @@ void WebGui::InitializeFunctionList()
 {
     AddFunction({
         // function called on new client connection
-        {   "ON_CONNECT",
-            [this](auto id, const auto &arg) {
-                AddWebSocketId(id);
-                SendWebSocketIdList();
-            }
-        },
+        // {   "ON_CONNECT",
+        //     [this](auto id, const auto &arg) {
+        //     }
+        // },
 
-        // function called on a client closed
-        {   "ON_CLOSED",
-            [this](auto id, const auto &arg) {
-                RemoveWebSocketId(id);
-                SendWebSocketIdList();
-            }
-        },
+        // // function called on a client closed
+        // {   "ON_CLOSED",
+        //     [this](auto id, const auto &arg) {
+        //     }
+        // },
 
         // send command via redis pub/sub channels
         {   "redis-publish", [this](auto id, const auto &arg) {
@@ -533,21 +514,6 @@ void WebGui::RedisSet(unsigned int connid, const boost::property_tree::ptree &ar
 }
 
 //_____________________________________________________________________________
-void WebGui::RemoveWebSocketId(unsigned int connid)
-{
-    LOG(warn) <<  __func__ << " websocket connid = " << connid;
-    fWebSocketIdList.remove_if([connid](const auto &p) {
-        return (connid==p.first);
-    });
-}
-
-//_____________________________________________________________________________
-void WebGui::SaveRDB(const std::string &runNumber)
-{
-
-}
-
-//_____________________________________________________________________________
 void WebGui::SendStateSummary(const std::map<std::string, ServiceState> & summaryTable)
 {
     static std::map<std::string, ServiceState> prevTable;
@@ -630,11 +596,11 @@ void WebGui::SendStateSummary(const std::map<std::string, ServiceState> & summar
 }
 
 //_____________________________________________________________________________
-void WebGui::SendWebSocketIdList()
+void WebGui::SendWebSocketIdList(const std::vector<std::pair<unsigned int, std::string>> &v)
 {
     std::string msg{"WebSocket Connected ID: Date<br>"};
 
-    for (const auto &[id, t] : fWebSocketIdList) {
+    for (const auto &[id, t] : v) {
         msg += " " + std::to_string(id) + " : " + t + "<br>";
     }
     LOG(debug) << __func__ << " " << msg;
