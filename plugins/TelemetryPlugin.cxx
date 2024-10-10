@@ -27,7 +27,13 @@ auto TelemetryPluginProgramOptions() -> fair::mq::Plugin::ProgOptions
     using opt = TelemetryPlugin::OptionKey;
     auto options = bpo::options_description(MyClass.data());
     options.add_options()
-    (opt::TelemetrySeverity.data(), bpo::value<std::string>()->default_value(fair::Logger::SeverityName(fair::Severity::trace)),
+    (opt::TelemetrySeverity.data(),
+        bpo::value<std::string>()->default_value(
+#if 1
+	fair::Logger::SeverityName(fair::Severity::trace).data()),
+#else //FairLogger 1.5 changed the class interface of this.
+	fair::Logger::SeverityName(fair::Severity::trace)),
+#endif
      "Log severity level (telemetry): trace, debug, info, state, warn, error, fatal, nolog.");
 
     return options;
