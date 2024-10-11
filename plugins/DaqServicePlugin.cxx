@@ -1104,7 +1104,9 @@ void Plugin::WriteProgOptions()
         std::make_pair("shm-mlock-segment",   std::to_string(GetProperty<bool>("shm-mlock-segment"))),
         std::make_pair("shm-zero-segment",    std::to_string(GetProperty<bool>("shm-zero-segment"))),
         std::make_pair("shm-throw-bad-alloc", std::to_string(GetProperty<bool>("shm-throw-bad-alloc"))),
+#if 0 // This option was used, and it is no longer useed in FairMQ 1.8.
         std::make_pair("ofi-size-hint",       std::to_string(GetProperty<std::size_t>("ofi-size-hint"))),
+#endif
         std::make_pair("rate",                std::to_string(GetProperty<float>("rate"))),
         std::make_pair("session",             GetProperty<std::string>("session")),
     })

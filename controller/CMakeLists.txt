@@ -45,15 +45,31 @@ target_link_directories(${EXEC} PUBLIC
   ${FairMQ_LIBDIR};
 )
 
-target_link_libraries(${EXEC} PUBLIC
-  ${Boost_LIBRARIES};
-  FairMQStateMachine;
-  FairLogger;
-  ${fmt_LIB};
-  ${HIREDIS_LIB};
-  ${REDIS_PLUS_PLUS_LIB};
-  ${CMAKE_THREAD_LIBS_INIT};
-)
+if ((FairMQ_VERSION VERSION_GREATER_EQUAL 1.8.0)
+  AND (FairMQ_VERSION VERSION_LESS_EQUAL 1.8.9))
+  target_link_libraries(${EXEC} PUBLIC
+    ${Boost_LIBRARIES};
+    fairmq;
+    FairLogger;
+    ${fmt_LIB};
+    ${HIREDIS_LIB};
+    ${REDIS_PLUS_PLUS_LIB};
+    ${CMAKE_THREAD_LIBS_INIT};
+  )
+elseif ((FairMQ_VERSION VERSION_GREATER_EQUAL 1.4.55)
+    AND (FairMQ_VERSION VERSION_LESS_EQUAL 1.4.56))
+  target_link_libraries(${EXEC} PUBLIC
+    ${Boost_LIBRARIES};
+    FairMQStateMachine;
+    FairLogger;
+    ${fmt_LIB};
+    ${HIREDIS_LIB};
+    ${REDIS_PLUS_PLUS_LIB};
+    ${CMAKE_THREAD_LIBS_INIT};
+  )
+else()
+  message(FATAL_ERROR "Unsupported FairMQ version ${FairMQ_VERSION}")
+endif()
 
 install(TARGETS
   ${EXEC};

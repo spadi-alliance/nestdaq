@@ -18,12 +18,25 @@ foreach(lvar IN ITEMS Sampler; Sink; NullDevice;)
     ${FairMQ_LIBDIR};
   )
 
-  target_link_libraries(${EXEC} PUBLIC 
-    ${Boost_LIBRARIES};  
-    ${fmt_LIB};
-    FairLogger;
-    FairMQ;
-  )
+  if ((FairMQ_VERSION VERSION_GREATER_EQUAL 1.8.0)
+    AND (FairMQ_VERSION VERSION_LESS_EQUAL 1.8.9))
+    target_link_libraries(${EXEC} PUBLIC 
+      ${Boost_LIBRARIES};  
+      ${fmt_LIB};
+      FairLogger;
+      fairmq;
+    )
+  elseif ((FairMQ_VERSION VERSION_GREATER_EQUAL 1.4.55)
+    AND (FairMQ_VERSION VERSION_LESS_EQUAL 1.4.56))
+    target_link_libraries(${EXEC} PUBLIC 
+      ${Boost_LIBRARIES};  
+      ${fmt_LIB};
+      FairLogger;
+      FairMQ;
+    )
+  else()
+    message(FATAL_ERROR "Unsupported FairMQ version ${FairMQ_VERSION}")
+  endif()
 
   install(TARGETS
     ${EXEC};

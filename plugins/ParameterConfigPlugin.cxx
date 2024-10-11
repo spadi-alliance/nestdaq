@@ -48,7 +48,9 @@ const std::unordered_set<std::string_view> reservedOptionsBool
 
 const std::unordered_set<std::string_view> reservedOptionsSize
 {   "shm-segment-size", //
+#if 0 // This option was not used, and it is no longer used in FairMQ 1.8.
     "ofi-size-hint", //
+#endif
     "color", //
 };
 
