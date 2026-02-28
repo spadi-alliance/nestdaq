@@ -26,7 +26,8 @@ dnf -y install \
     zlib-devel \
     bzip2-devel \
     libzstd-devel \
-    libquadmath-devel
+    libquadmath-devel \
+    python3-devel
 
 # If needed for AlaLinux 9
 # dnf gcc-toolset-14
@@ -42,12 +43,12 @@ git clone https://github.com/spadi-alliance/nestdaq
 # configure
 cmake \
   -DCMAKE_INSTALL_PREFIX=./install \
-  -DBUILD_PARALLE_LEVEL=$(nproc) \
+  -DBUILD_PARALLEL_LEVEL=$(nproc) \
   -B ./build-external \
   -S nestdaq/cmake
 
 # Both the build and install steps are executed
-cmake --build ./build-exteranl
+cmake --build ./build-external
 ```
 
 - In the command example above, CMake’s `ExternalProject` is used to perform `git clone`, build, and installation.
