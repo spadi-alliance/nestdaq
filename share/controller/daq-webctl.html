@@ -1,570 +1,459 @@
 <!DOCTYPE html>
-<html>
-  <head>
+<html lang="ja">
+<head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DAQ Controller</title>
-  </head>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --primary-color: #1a73e8;
+            --success-color: #218838;
+            --success-color-h: #104419;
+            --danger-color: #c82333;
+            --danger-color-h: #681116;
+            --warning-color: #eab000;
+            --warning-color-h: #755800;
+            --text-main: #1a1a1a;
+            --border-color: #bbb;
+        }
 
-  <body>
-    <h1>DAQ controller</h1>    
+        body {
+            font-family: 'Segoe UI', 'Meiryo', 'Arial', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 8px;
+            font-size: 13px;
+            /* 基本は太字にせず、必要な場所で個別に太字設定します */
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
 
-    <h2>RUN number</h2>
-    <p>
-      <form onsubmit="return SubmitMessage('run_number')">
-        New value:
-        <input type="text" id="run_number"/>
-        <input type="submit" value="Send"/>
-        <input type="button" onclick="redis_incr('run_number')" value="+1"  data-toggle="tool-tip" title="Directly increment RUN number on the redis"/>
-        <input type="button" onclick="redis_get('run_number')" value="Get" data-toggle="tool-tip" title="Read RUN number on the redis and set it to the text box"/>
-        <label><input type="checkbox" id="run-number-auto-increment-checkbox" name="run-number-auto-increment-checkbox" checked/>Auto increment at RUN-Stop</label>
-      </form>
-      <div id="next_run_number">Next : </div>
-      <div id="latest_run_number">Latest : </div>
-      <div id="latest_run_start_time">Start : </div>
-      <div id="latest_run_stop_time">Stop : </div>
-   </p>
-   
-    
-    <h2>State transition command</h2>
-    <label><input type="checkbox" id="wait-device-ready" name="wait-device-ready-checkbox" onchange="redis_set_checkbox_status('wait-device-ready')" checked/>Wait Device Ready</label>
-    <label><input type="checkbox" id="wait-ready"        name="wait-ready-checkbox"        onchange="redis_set_checkbox_status('wait-ready')"        checked/>Wait Ready</label>
+        h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--primary-color); }
+        h2 { font-size: 15px; font-weight: 800; margin: 0 0 8px 0; border-left: 4px solid var(--primary-color); padding-left: 8px; }
+        h3 { font-size: 11px; font-weight: 800; color: #555; margin: 12px 0 4px 0; }
 
-    <h3>Idle &RightTriangle; Running</h3>
-    <p>
-      Idle &RightTriangle; 
-      <!--
-      <input type="button" onclick="redis_publish('INIT DEVICE')"   value="Init Device" data-toggle="tool=tip" title="changes state from Idle to Initialized"> 
-      &RightTriangle; Initializing Device &RightTriangle; Initialized &RightTriangle; 
-      <input type="button" onclick="redis_publish('BIND')"          value="Bind" data-toggle="tool-tip" title="changes state from Idle/Initialized to Bound"> 
-      &RightTriangle; Binding &RightTriangle; Bound &RightTriangle; 
-      <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Socket" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
-      &RightTriangle; Connecting &RightTriangle; Device Ready &RightTriangle;
-      -->
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 8px;
+        }
 
-      <input type="button" onclick="redis_publish('CONNECT')"       value="Init Device and Connection" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound to DeviceReady"> 
-      Device Ready &RightTriangle;
+        .card {
+            background: var(--card-bg);
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+            border: 1px solid #bbb;
+        }
 
-      <input type="button" onclick="redis_publish('INIT TASK')"     value="Init Task" data-toggle="tool-tip" title="changes state from Idle/Initialized/Bound/DeviceReady to Ready"> 
-      &RightTriangle; <!-- Initializing Task &RightTriangle; --> Ready &RightTriangle;
-      <input type="button" onclick="redis_publish('RUN')"           value="Run" data-toggle="tool-tip" title="changes any state to Running"> 
-      &RightTriangle; Running
-    </p>
-    <h3>Idle &LeftTriangle; Running</h3>
-    <!--
-    <p>
-      Device Ready &LeftTriangle; Resetting Task &LeftTriangle;
-      <input type="button" onclick="redis_publish('RESET TASK')"   value="Reset Task" data-toggle="tool-tip" title="changes state from Running/Ready to DeviceReady"> 
-      &LeftTriangle; Ready &LeftTriangle;
-      <input type="button" onclick="redis_publish('STOP')"         value="Stop" data-toggle="tool=tip" title="changes state from Running to Ready"> 
-      &LeftTriangle; Running
-    </p>
-    <p>
-      Idle &LeftTriangle; Resetting Device &LeftTriangle;
-      <input type="button" onclick="redis_publish('RESET DEVICE')" value="Reset Device" data-toggle="tool-tip" title="changes any state to Idle"> 
-      &LeftTriangle; Initialized / Bound / DeviceReady
-    </p>
-    -->
-    <p>
-      Idle &LeftTriangle; <!-- Resetting Device &LeftTriangle; -->
-      <input type="button" onclick="redis_publish('RESET DEVICE')" value="Reset Device" data-toggle="tool-tip" title="changes any state to Idle"> 
-      &LeftTriangle; Device Ready &LeftTriangle; <!-- Resetting Task &LeftTriangle; -->
-      <input type="button" onclick="redis_publish('RESET TASK')"   value="Reset Task" data-toggle="tool-tip" title="changes state from Running/Ready to DeviceReady"> 
-      &LeftTriangle; Ready &LeftTriangle;
-      <input type="button" onclick="redis_publish('STOP')"         value="Stop" data-toggle="tool=tip" title="changes state from Running to Ready"> 
-      &LeftTriangle; Running
-    </p>
-    <h3>&RightTriangle; Exit</h3>
-    <p>
-      Any state &RightTriangle;
-      <input type="button" onclick="redis_publish('END')" value="End" data-toggle="tool-tip" title="changes any state to Exiting"> 
-      &RightTriangle; Exiting
-    </p>
-    
-    <h2>State Summary</h2>
-    <p id="State Summary"></p>
-      <input type="button" id="buttonInstanceTable" onclick="ToggleInstanceTable(this)" value="Show details" data-toggle="tool-tip" title="Show instance state table">
-    <p id="Instance State"></p>
+        .flex-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        
+        /* 入力ボックスと標準ボタン */
+        input[type="text"] {
+            padding: 5px;
+            border: 2px solid #aaa;
+            border-radius: 3px;
+            width: 70px;
+            font-weight: 800;
+        }
 
-    <h2>Select command target</h2>
-    <p id="commandTarget"> 
-      <select  id="serviceSelector"  multiple size=10></select>
-      <select  id="instanceSelector"  multiple size=10></select>
-    </p>
-   
-    
-    <p id="myWebSocketConnectionId"></p>
-    <p id="websocketConnectedIdList"></p>
-    <h2>Messages</h2>
-    <div id="main"></div>
-    <!--
-      <p>
-      <button onclick="SendMessage('{ "command": "halt" }')" data-toggle="tool-tip" title="Shuttdown DAQ controller server">Halt</button> 
-    </p>
-    -->
-  </body>
+        button, input[type="submit"], input[type="button"] {
+            padding: 5px 10px;
+            border-radius: 3px;
+            border: 1px solid #999;
+            background: #fdfdfd;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 12px;
+            transition: all 0.1s;
+        }
 
-  
-  <!-- ==================================================================== -->
-  <script type='text/javascript'>
+        button:hover,
+        input[type="submit"]:hover,
+        input[type="button"]:hover {
+            background: #ddd; border-color: #666;
+        }
 
-    // ==================================================
-    // -------------- table --------------------
-    const instStateTable    = CreateInstanceStateTable();
-    const stateSummaryTable = CreateStateSummaryTable();
+        .btn {
+            background-color: #white;
+            color: black;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s; /* 色の変化を滑らかにする設定 */
+        }
 
-    // --------------- websocket ---------------
-    let path = window.location.href;
-    path = path.replace("http://", "ws://");
-    path = path.replace(".html", "");
-    console.log('starting socket ' + path);
+        .input:hover {
+            background-color: #ccc;
+        }
 
-    const socket = new WebSocket(path);
+        /* 主要コマンドボタン（大きく設定） */
+        .btn-cmd {
+            padding: 8px 16px !important;
+            font-size: 14px !important;
+            min-width: 100px;
+        }
 
-    socket.onopen = function() {
-       console.log('websocket initialized');
-       this._ready = true;
+        /*
+        .btn-run { background-color: var(--success-color) !important; color: white !important; border: none !important; }
+        .btn-stop { background-color: var(--danger-color) !important; color: white !important; border: none !important; }
+        .btn-reset { background-color: var(--warning-color) !important; color: #000 !important; border: none !important; }
+        */
 
-       //--------------------------------
-       redis_set_checkbox_status('wait-device-ready');
-       redis_set_checkbox_status('wait-ready');
-    }
+        .btn-run { background-color: var(--success-color); color: white ; border: none; }
+        .btn-run:hover { background-color: var(--success-color-h); color: white; border: none; }
+        .btn-stop { background-color: var(--warning-color); color: white; border: none; }
+        .btn-stop:hover { background-color: var(--warning-color-h); color: white; border: none; }
+        .btn-reset { background-color: var(--danger-color); color: white; border: none; }
+        .btn-reset:hover { background-color: var(--danger-color-h); color: white; border: none; }
 
-    socket.onmessage = function(e) {
-       const msg = e.data;
-       if (typeof msg != 'string') {
-         const s = "unsupported message kind: " + (typeof msg);
-         console.log(s);
-         alert(s);
-         return;
-       } else {
-         if (msg.startsWith('error:')) {
-           alert(msg);
-         } else if (msg.startsWith('My WebSocket Connection ID:')) {
-           AddMyWebSocketConnectionId(msg);
-         } else if (msg.startsWith('WebSocket Connected ID:')) {
-           UpdateWebSocketConnectedIdList(msg);
-         } else {
-           //console.log(msg);
-           const obj = JSON.parse(msg);
-           //console.log('obj.type : ' + obj.type);
+        /* チェックボックス用ラベル（太字解除） */
+        .label-normal {
+            font-weight: normal !important;
+            cursor: pointer;
+            font-size: 13px;
+        }
 
-           if (obj.type=='error') {
-            alert(obj.value);
-           } else if (obj.type=='set run_number') {
-            SetRunNumber(obj.value);
-           } else if (obj.type=='set latest_run_number') {
-            SetLatestRunNumber(obj.value); 
-           } else if (obj.type=='state-summary-table') {
-            UpdateSummaryTable(obj);
+        .run-monitor {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+            margin-top: 8px;
+            background: #eee;
+            padding: 8px;
+            border-radius: 3px;
+            font-weight: 800;
+        }
+        .run-monitor div { font-family: 'Consolas', monospace; font-size: 12px; }
+
+        .arrow-separator { color: #666; font-weight: 900; font-size: 18px; margin: 0 4px; }
+
+        select {
+            width: 100%;
+            /* height: 110px; */
+            border: 2px solid #aaa;
+            border-radius: 3px;
+            font-weight: 800;
+            font-size: 12px;
+        }
+
+        table {
+            border-collapse: collapse;
+            font-size: 11px;
+            background: white;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #999;
+            padding: 3px 5px;
+            text-align: center;
+            font-weight: 700;
+        }
+        th { background: #e0e0e0; color: #000; font-weight: 800; }
+        
+        #main {
+            height: 140px;
+            overflow-y: auto;
+            background: #111;
+            color: #0f0; 
+            padding: 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .footer-info { font-size: 10px; color: #555; display: flex; gap: 10px; font-weight: 800; }
+        strong { font-weight: 800; }
+    </style>
+</head>
+<body>
+
+    <header style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 5px;">
+        <h1>DAQ Controller</h1>
+        <!--
+        <div class="footer-info">
+            <div id="myWebSocketConnectionId">Connecting...</div>
+            <div id="websocketConnectedIdList"></div>
+        </div>
+        -->
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            
+            <div class="card" style="margin-bottom: 8px;">
+                <h2>RUN Configuration</h2>
+                <form onsubmit="return SubmitMessage('run_number')" class="flex-row">
+                    <strong>RUN #:</strong>
+                    <input type="text" id="run_number"/>
+                    <input type="submit" value="SET"/>
+                    <input type="button"  onclick="redis_incr('run_number')" value="+1"/>
+                    <input type="button"  onclick="redis_get('run_number')" value="GET"/>
+                    <label class="label-normal" style="margin-left:10px;">
+                    <input type="checkbox" id="run-number-auto-increment-checkbox" checked/> Auto increment </label>
+                </form>
+
+                <div class="run-monitor">
+                    <div id="next_run_number">Next : </div>
+                    <div id="latest_run_number">Latest : </div>
+                    <div id="latest_run_start_time">Start : </div>
+                    <div id="latest_run_stop_time">Stop : </div>
+                </div>
+
+            </div>
+
+            <div class="card" style="margin-bottom: 8px;">
+                <h2>State Transition</h2>
+                <div class="flex-row" style="margin-bottom: 12px;">
+                    <label class="label-normal"><input type="checkbox" id="wait-device-ready" onchange="redis_set_checkbox_status('wait-device-ready')" checked/> Wait Device Ready </label>
+                    <label class="label-normal"><input type="checkbox" id="wait-ready" onchange="redis_set_checkbox_status('wait-ready')" checked/> Wait Ready </label>
+                </div>
+
+                <div class="command-box">
+                    <h3>Forward: Idle &RightArrow; Running</h3>
+                    <div class="flex-row">
+                        <span class="arrow-separator">Idle &RightTriangle;</span>
+                        <button class="btn-cmd" onclick="redis_publish('CONNECT')">INIT DEVICE</button>
+                        <span class="arrow-separator">&RightTriangle;</span>
+                        <button class="btn-cmd" onclick="redis_publish('INIT TASK')">INIT TASK</button>
+                        <span class="arrow-separator">&RightTriangle;</span>
+                        <button class="btn-cmd btn-run" onclick="redis_publish('RUN')">RUN</button>
+                        <span class="arrow-separator">&RightTriangle; Running</span>
+                    </div>
+                </div>
+
+                <div class="command-box">
+                    <h3>Backward: Running &LeftArrow; Idle</h3>
+                    <div class="flex-row">
+                        <span class="arrow-separator">Idle &LeftTriangle;</span>
+                        <button class="btn-cmd btn-reset" onclick="redis_publish('RESET DEVICE')">RESET DEVICE</button>
+                        <span class="arrow-separator">&LeftTriangle;</span>
+                        <button class="btn-cmd" onclick="redis_publish('RESET TASK')">RESET TASK</button>
+                        <span class="arrow-separator">&LeftTriangle;</span>
+                        <button class="btn-cmd btn-stop" onclick="redis_publish('STOP')">STOP</button>
+                        <span class="arrow-separator">&LeftTriangle; Running</span>
+                    </div>
+                </div>
+
+                <div class="flex-row" style="margin-top:15px; border-top:1px solid #ddd; padding-top:10px;">
+                    <button class="btn-cmd" onclick="redis_publish('END')">END PROCESS</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>State Summary</h2>
+                    <input type="button" id="buttonInstanceTable" onclick="ToggleInstanceTable(this)" value="DETAILS" style="padding: 2px 6px; font-size: 10px;">
+                </div>
+                <div class="table-wrapper" id="State Summary"></div>
+                <div class="table-wrapper" id="Instance State" style="display:none; margin-top: 8px;"></div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="card" style="margin-bottom: 8px;">
+                <h2>Control Targets</h2>
+                <!--
+                <p style="font-size: 10px; margin: 0 0 2px 0; font-weight:800;">Services</p>
+                -->
+                <select id="serviceSelector" multiple size=10></select>
+                <p style="font-size: 4px;"></p>
+                <!--
+                <p style="font-size: 10px; margin: 8px 0 2px 0; font-weight:800;">Instances:</p>
+                -->
+                <select id="instanceSelector" multiple size=12></select>
+            </div>
+
+            <div class="card">
+                <!--
+                <h2>Messages</h2>
+                <div id="main"></div>
+
+                <p>
+                <button onclick="SendMessage('{ "command": "halt" }')"
+                    data-toggle="tool-tip" title="Shuttdown DAQ controller server">Halt
+                </button>
+                </p>
+                -->
+
+                <h2>Connections</h2>
+                <div id="myWebSocketConnectionId">Connecting...</div>
+                <div id="websocketConnectedIdList"></div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <script type='text/javascript'>
+        const instStateTable    = CreateInstanceStateTable();
+        const stateSummaryTable = CreateStateSummaryTable();
+
+        let path = window.location.href.replace("http://", "ws://").replace(".html", "");
+        const socket = new WebSocket(path);
+
+        socket.onopen = function() {
+           this._ready = true;
+           redis_set_checkbox_status('wait-device-ready');
+           redis_set_checkbox_status('wait-ready');
+        }
+
+        socket.onmessage = function(e) {
+           const msg = e.data;
+           if (typeof msg != 'string') return;
+
+           if (msg.startsWith('error:')) {
+             alert(msg);
+           } else if (msg.startsWith('My WebSocket Connection ID:')) {
+             document.getElementById("myWebSocketConnectionId").innerHTML = msg;
+           } else if (msg.startsWith('WebSocket Connected ID:')) {
+             document.getElementById("websocketConnectedIdList").innerHTML = msg;
+           } else {
+               try {
+                   const obj = JSON.parse(msg);
+                   if (obj.type=='error') {
+                       alert(obj.value);
+                   } else if (obj.type=='set run_number') {
+                       SetRunNumber(obj.value);
+                   } else if (obj.type=='set latest_run_number') {
+                       SetLatestRunNumber(obj.value); 
+                   } else if (obj.type=='state-summary-table') {
+                       UpdateSummaryTable(obj);
+                   }
+               } catch(err) {
+                   console.log("Msg error:", err);
+               }
            }
-          
-           //AddOutput("txt: " + msg);
-         }
-       } 
-
-       //console.log('get: ' + msg);
-    }
-
-    socket.onclose = function() {
-       console.log('websocket closed');
-       window.close();
-       this._ready = false;
-    }
-
-    socket.onerror = function (err) {
-       this._ready = false;
-       console.log('websocket error' + err);
-    }
-
-    // ==================================================
-    // --------------------------------------------------
-    function AddOutput(arg) {
-       document.getElementById("main").innerHTML += arg + "<br>";
-    }
-
-    // --------------------------------------------------
-    function AddMyWebSocketConnectionId(arg) {
-      document.getElementById("myWebSocketConnectionId").innerHTML = arg + "<br>";
-    }
-    
-    // --------------------------------------------------
-    function CreateInstanceStateTable() {
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const tbody = document.createElement('tbody');
-      table.appendChild(thead);
-      table.appendChild(tbody);
-      document.getElementById('Instance State').appendChild(table);
-      table.setAttribute("border", "1");
-      table.setAttribute("style", "border-collapse: collapse");
-      
-      // table header
-      const hrow                       = document.createElement('tr');
-
-      const hcol_service_name          = document.createElement('th'); 
-      const hcol_instance_name         = document.createElement('th'); 
-      const hcol_state                 = document.createElement('th'); 
-      const hcol_last_update           = document.createElement('th');
-
-      hcol_service_name       .innerHTML = "Service";
-      hcol_instance_name      .innerHTML = "Instance";
-      hcol_state              .innerHTML = "state";
-      hcol_last_update        .innerHTML = "last-update";
-
-      hrow.appendChild(hcol_service_name       );
-      hrow.appendChild(hcol_instance_name      );
-      hrow.appendChild(hcol_state              );
-      hrow.appendChild(hcol_last_update        ); 
-      thead.appendChild(hrow);
-
-      return table;
-    }
-
-    // --------------------------------------------------
-    function CreateStateSummaryTable() {
-      const table = document.createElement('table');
-      const thead = document.createElement('thead');
-      const tbody = document.createElement('tbody');
-      table.appendChild(thead);
-      table.appendChild(tbody);
-      document.getElementById('State Summary').appendChild(table);
-      table.setAttribute("border", "1");
-      table.setAttribute("style", "border-collapse: collapse");
-
-      // table header
-      const hrow                       = document.createElement('tr');
-
-      const hcol_name                  = document.createElement('th'); 
-      const hcol_n_instances           = document.createElement('th');
-      const hcol_undefined             = document.createElement('th');
-      const hcol_ok                    = document.createElement('th');
-      const hcol_error                 = document.createElement('th');
-      const hcol_idle                  = document.createElement('th');
-      const hcol_initializing_device   = document.createElement('th');
-      const hcol_initialized           = document.createElement('th');
-      const hcol_binding               = document.createElement('th');
-      const hcol_bound                 = document.createElement('th');
-      const hcol_connecting            = document.createElement('th');
-      const hcol_device_ready          = document.createElement('th');
-      const hcol_initializing_task     = document.createElement('th');
-      const hcol_ready                 = document.createElement('th');
-      const hcol_running               = document.createElement('th');
-      const hcol_resetting_task        = document.createElement('th');
-      const hcol_resetting_device      = document.createElement('th');
-      const hcol_exiting               = document.createElement('th');
-      const hcol_last_update           = document.createElement('th');
-
-      hcol_name               .innerHTML = "Service";
-      hcol_n_instances        .innerHTML = "N"; 
-      //hcol_undefined          .innerHTML = "Undefined";
-      hcol_undefined          .innerHTML = "Undef.";
-      hcol_ok                 .innerHTML = "Ok";
-      hcol_error              .innerHTML = "Error";
-      hcol_idle               .innerHTML = "Idle"; 
-      hcol_initializing_device.innerHTML = "Init-Device"; //"InitializingDevice"; 
-      //hcol_initialized        .innerHTML = "Initialized"; 
-      hcol_initialized        .innerHTML = "Init."; 
-      //hcol_binding            .innerHTML = "Binding"; 
-      hcol_binding            .innerHTML = "Bind."; 
-      hcol_bound              .innerHTML = "Bound"; 
-      //hcol_connecting         .innerHTML = "Connecting"; 
-      hcol_connecting         .innerHTML = "Conn."; 
-      hcol_device_ready       .innerHTML = "Device-Ready"; 
-      hcol_initializing_task  .innerHTML = "Init-Task"; //"InitializingTask"; 
-      hcol_ready              .innerHTML = "Ready"; 
-      hcol_running            .innerHTML = "Running"; 
-      hcol_resetting_task     .innerHTML = "Reset-Task"; //"ResettingTask"; 
-      hcol_resetting_device   .innerHTML = "Reset-Device"; //"ResettingDevice"; 
-      hcol_exiting            .innerHTML = "Exiting"; 
-      hcol_last_update        .innerHTML = "last-update";
-
-      hrow.appendChild(hcol_name               );
-      hrow.appendChild(hcol_n_instances        );
-      hrow.appendChild(hcol_undefined          );
-      hrow.appendChild(hcol_ok                 );
-      hrow.appendChild(hcol_error              ); 
-      hrow.appendChild(hcol_idle               ); 
-      hrow.appendChild(hcol_initializing_device); 
-      hrow.appendChild(hcol_initialized        ); 
-      hrow.appendChild(hcol_binding            ); 
-      hrow.appendChild(hcol_bound              ); 
-      hrow.appendChild(hcol_connecting         ); 
-      hrow.appendChild(hcol_device_ready       ); 
-      hrow.appendChild(hcol_initializing_task  ); 
-      hrow.appendChild(hcol_ready              ); 
-      hrow.appendChild(hcol_running            ); 
-      hrow.appendChild(hcol_resetting_task     ); 
-      hrow.appendChild(hcol_resetting_device   ); 
-      hrow.appendChild(hcol_exiting            ); 
-      hrow.appendChild(hcol_last_update        ); 
-      thead.appendChild(hrow);
-
-      return table;
-    }
-    
-    // --------------------------------------------------
-    function redis_get(arg) {
-      SendMessage('{ "command": "redis-get", "value": "' + arg + '" }');
-    }
-
-    // --------------------------------------------------
-    function redis_incr(arg) {
-      SendMessage('{ "command": "redis-incr", "value": "' + arg + '" }');
-    }
-    
-    // --------------------------------------------------
-    function redis_publish(arg) {
-      if (arg == "RUN") {
-        d = new Date();
-        val = document.getElementById('latest_run_start_time');
-        val.innerHTML = 'Start : ' + d.toString();
-        val.style.color="black";
-        document.getElementById('latest_run_stop_time').innerHTML = 'Stop :  ';
-      } else if (arg == "STOP") {
-        d = new Date();
-        document.getElementById('latest_run_start_time').style.color="grey";
-        document.getElementById('latest_run_stop_time').innerHTML = 'Stop :  ' + d.toString();
-        autoIncr = document.getElementById('run-number-auto-increment-checkbox');
-        if (autoIncr.checked) {
-          redis_incr('run_number');
         }
-      }
-      //console.log(this.constructor.name + ': arg = ' + arg);
-      const serviceOptions  = document.getElementById('serviceSelector'); 
-      const srv = [];
-      for (let i=0; i< serviceOptions.length; i++) {
-        if (serviceOptions[i].selected) {
-          srv.push(serviceOptions[i].text);
+
+        function CreateInstanceStateTable() {
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            table.appendChild(thead); table.appendChild(tbody);
+            document.getElementById('Instance State').appendChild(table);
+            const hrow = document.createElement('tr');
+            ["Service", "Instance", "State", "Update"].forEach(text => {
+                const th = document.createElement('th'); th.innerHTML = text; hrow.appendChild(th);
+            });
+            thead.appendChild(hrow);
+            return table;
         }
-      }
-      const instOptions  = document.getElementById('instanceSelector'); 
-      const inst = [];
-      for (let i=0; i< instOptions.length; i++) {
-        if (instOptions[i].selected) {
-          inst.push(instOptions[i].text);
+
+        function CreateStateSummaryTable() {
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+            table.appendChild(thead); table.appendChild(tbody);
+            document.getElementById('State Summary').appendChild(table);
+            const hrow = document.createElement('tr');
+            const headers = ["Service",
+                             "<div style='color: gray'>N</div>",
+                             "UD", "Ok", "Err",
+                             "<div style='color: #c82333'>Idle</div>",
+                             "I-D", "Init", "Bind", "Bnd", "Conn", "D-R", "I-T", "Rdy",
+                             "<div style='color: #218838'>Run</div>",
+                             "R-T", "R-D", "Exit", "Update"];
+            headers.forEach(text => {
+                const th = document.createElement('th'); th.innerHTML = text; hrow.appendChild(th);
+            });
+            thead.appendChild(hrow);
+            return table;
         }
-      }
 
-      const cmd = { command: 'redis-publish', value: arg, services: srv, instances: inst };
-      const msg = JSON.stringify(cmd);
-      console.log(this.constructor.name + ': msg = ' + msg);
-      SendMessage(msg);
-    }
+        function redis_get(arg) { SendMessage(JSON.stringify({ command: "redis-get", value: arg })); }
+        function redis_incr(arg) { SendMessage(JSON.stringify({ command: "redis-incr", value: arg })); }
+        function redis_set(key, value) { SendMessage(JSON.stringify({ command: "redis-set", name: key, value: value })); }
+        function redis_set_checkbox_status(key) { redis_set(key, document.getElementById(key).checked.toString()); }
 
-
-    // --------------------------------------------------
-    function redis_set(key, value) {
-      SendMessage('{ "command": "redis-set", "name": "' + key + '", "value": "' + value + '" }');
-    }
-
-    // --------------------------------------------------
-    function redis_set_checkbox_status(key) {
-      SendMessage('{ "command": "redis-set", "name": "' + key + '", "value": "' + document.getElementById(key).checked + '" }');
-    }
-
-    // --------------------------------------------------
-    function SendMessage(arg) {
-      console.log(this.constructor.name + ': arg = ' + arg);
-       if (socket) {
-          socket.send(arg);
-       }
-    }
-
-    // --------------------------------------------------
-    function SetLatestRunNumber(arg) {
-      console.log('SetLatestRunNumber: ', arg);
-      document.getElementById("latest_run_number").innerHTML = 'Latest : ' + arg;
-    }
-
-    // --------------------------------------------------
-    function SetRunNumber(arg) {
-      console.log('SetRunNumber: ', arg);
-      document.getElementById("run_number").value = arg; 
-      document.getElementById("next_run_number").innerHTML = 'Next : ' + arg; 
-    }
-
-    // --------------------------------------------------
-    function SubmitMessage(arg) {
-      //console.log(this.constructor.name + ': arg = ' + arg);
-      const val = document.getElementById(arg).value;
-      const num = Number(val);
-      //console.log('num = ' + num + ', is integer = ', + Number.isInteger(num) + ", sign = " + Math.sign(num));
-      if (!Number.isInteger(num)) {
-        alert('invalid run number = '+ val + ' (value is' + num + ')');
-        return false;
-      }
-      //if (Math.sign(num)<0) {
-      //  alert('invalid run number = '+num +' (value is negative)');
-      //  return false;
-      //}
-      redis_set(arg, document.getElementById(arg).value);
-      redis_get('run_number');
-      return false;
-    }
-    
-    // --------------------------------------------------
-    function ToggleInstanceTable(arg) {
-      if (arg.value == "Hide details") {
-        arg.value = "Show details";
-      } else {
-        arg.value = "Hide details";
-      }
-
-    }
-
-    // --------------------------------------------------
-    function UpdateSummaryTable(arg) {
-      const services = arg.services;
-     
-      //console.log('UpdateSummaryTable: services.length ' + services.length);
-      //console.log('UpdateSummaryTable: stateSummaryTable.length ' + stateSummaryTable.rows.length);
-      
-      // update state summary 
-      for (let i=stateSummaryTable.rows.length; stateSummaryTable.rows.length>1; --i) {
-        stateSummaryTable.deleteRow(-1);
-      }
-      for (let i=0; i<services.length; ++i) {
-        const row = stateSummaryTable.insertRow(-1);
-        for (let j=0; j<(services[0].counts.length+3); j++) {
-          row.insertCell(-1);
-        }
-        const obj = services[i];
-        //const row = stateSummaryTable.rows[i+1]; // rows[0] == thead
-        const c   = row.cells;
-        c[0].innerHTML = obj.service;
-        c[1].innerHTML = obj.n_instances;
-        for (let j=0; j<obj.counts.length; ++j) {
-          const val = obj.counts[j].value;
-          c[j+2].innerHTML = (val!=0) ? val : '';
-        }
-        c[obj.counts.length+2].innerHTML = obj.date;
-      }
-
-      // update instance state table
-      for (let i=instStateTable.rows.length; instStateTable.rows.length>1; --i) {
-        instStateTable.deleteRow(-1);
-      }
-      const btnVal = document.getElementById('buttonInstanceTable').value;
-      // The value of 'btnVal' corresponds to the next show/hide tate. 
-      // i.e. The current value means the opposite of the show/hide state. 
-      if (btnVal === 'Hide details') { 
-        for (let i=0; i<services.length; ++i) {
-          const srv = services[i];
-          for (let j=0; j<srv.instances.length; ++j) {
-            const row = instStateTable.insertRow(-1);
-            for (let i=0; i<4; ++i) {
-              row.insertCell(-1);
+        function redis_publish(arg) {
+            if (arg == "RUN") {
+                document.getElementById('latest_run_start_time').innerHTML = 'START : ' + new Date().toLocaleTimeString();
+                document.getElementById('latest_run_stop_time').innerHTML = 'STOP : ';
+            } else if (arg == "STOP") {
+                document.getElementById('latest_run_stop_time').innerHTML = 'STOP : ' + new Date().toLocaleTimeString();
+                if (document.getElementById('run-number-auto-increment-checkbox').checked) redis_incr('run_number');
             }
-            const obj = srv.instances[j];
-            const c = row.cells;
-            c[0].innerHTML = obj.service;
-            c[1].innerHTML = obj.instance;
-            c[2].innerHTML = obj.state;
-            c[3].innerHTML = obj.date;
-          }
+            const srv = Array.from(document.getElementById('serviceSelector').options).filter(o => o.selected && !o.disabled).map(o => o.text);
+            const inst = Array.from(document.getElementById('instanceSelector').options).filter(o => o.selected && !o.disabled).map(o => o.text);
+            SendMessage(JSON.stringify({ command: 'redis-publish', value: arg, services: srv, instances: inst }));
         }
-      } 
 
-      // rename field: service -> name
-      const srvArray = new Array(); 
-      for (let i=0; i<services.length; ++i) {
-        srvArray.push({ name: services[i].service });
-      }
-      const srvObj = { services: srvArray, changed: arg.service_list_changed };
-      UpdateTargetServices(srvObj);
-      
-      const instArray = new Array();
-      let instChanged = arg.instance_list_changed;
-      for (let i=0; i<services.length; ++i)  {
-        const srv = services[i];
-        for (let j=0; j<srv.instances.length; ++j) {
-          instArray.push({ name: srv.service + ':' + srv.instances[j].instance });
+        function SendMessage(arg) { if (socket && socket.readyState === WebSocket.OPEN) socket.send(arg); }
+        function SetLatestRunNumber(arg) { document.getElementById("latest_run_number").innerHTML = 'Latest : ' + arg; }
+        function SetRunNumber(arg) {
+            document.getElementById("run_number").value = arg; 
+            document.getElementById("next_run_number").innerHTML = 'Next : ' + arg; 
         }
-      }
-      const instObj = { instances: instArray, changed: instChanged };
-      UpdateTargetInstances(instObj);
-    }
 
-    // --------------------------------------------------
-    function UpdateTargetInstances(arg) {
-      // -- -- -- -- -- -- -- -- 
-      // update HTML selection list
-      // -- -- -- -- -- -- -- -- 
-      // clear selection list
-      const sel = document.getElementById("instanceSelector");
-      if (sel.options.length>0) {
-      if  (arg.changed === 'false') {
-        return;
-      }
-      }
-      while (sel.lastChild) {
-        sel.removeChild(sel.lastChild);
-      }
-
-      // dummy option (disabled) for indicating "Choose Instances" 
-      let dummy = document.createElement("option");
-      dummy.text="Choose Instances";
-      dummy.disabled = true;
-      sel.appendChild(dummy);
-      
-      // default selected option with name of "all"
-      dummy = document.createElement("option");
-      dummy.text="all";
-      dummy.selected = true;
-      sel.appendChild(dummy);
-      
-      const v = arg.instances;
-      for (let i=0; i<v.length; i++) {
-        const option = document.createElement("option");
-        option.text = v[i].name;
-        option.value = i;
-        sel.appendChild(option);
-      } 
-    }
-
-    // --------------------------------------------------
-    function UpdateTargetServices(arg) {
-      // -- -- -- -- -- -- -- -- --
-      // update selection list
-      // -- -- -- -- -- -- -- -- --
-
-      // clear selection list
-      const sel = document.getElementById("serviceSelector");
-      if (sel.options.length>0) {
-        if  (arg.changed === 'false') {
-          return;
+        function SubmitMessage(arg) {
+            const val = document.getElementById(arg).value;
+            if (!Number.isInteger(Number(val))) return false;
+            redis_set(arg, val); redis_get('run_number'); return false;
         }
-      }
-      while (sel.lastChild) {
-        sel.removeChild(sel.lastChild);
-      }
-      // dummy option (disabled) for indicating "Choose Services" 
-      let dummy = document.createElement("option");
-      dummy.text="Choose Services";
-      dummy.disabled = true;
-      sel.appendChild(dummy);
-      // default selected option with name of "all"
-      dummy = document.createElement("option");
-      dummy.text="all";
-      dummy.selected = true;
-      sel.appendChild(dummy);
-      // update target list
-      const v = arg.services;
-      for (let i=0; i<v.length; ++i) {
-        const option = document.createElement("option");
-        option.text = v[i].name;
-        option.value = i;
-        sel.appendChild(option);
-      }
-    }
 
-    // --------------------------------------------------
-    function UpdateWebSocketConnectedIdList(arg) {
-      document.getElementById("websocketConnectedIdList").innerHTML = arg + "<br>";
-    }
+        function ToggleInstanceTable(arg) {
+            const area = document.getElementById('Instance State');
+            const isHidden = area.style.display === "none";
+            area.style.display = isHidden ? "block" : "none";
+            arg.value = isHidden ? "HIDE DETAILS" : "DETAILS";
+        }
 
+        function UpdateSummaryTable(arg) {
+            const services = arg.services;
+            while(stateSummaryTable.rows.length > 1) stateSummaryTable.deleteRow(-1);
+            services.forEach(obj => {
+                const row = stateSummaryTable.insertRow(-1);
+                row.insertCell(-1).innerHTML = obj.service;
+                const cellN = row.insertCell(-1);
+                cellN.innerHTML = obj.n_instances;
+                cellN.style.fontWeight = "900"; 
+                cellN.style.fontSize = "13px";
+                obj.counts.forEach(c => {
+                    const cell = row.insertCell(-1);
+                    cell.innerHTML = c.value !== 0 ? c.value : '';
+                });
+                row.insertCell(-1).innerHTML = obj.date;
+            });
 
-  </script>
+            while(instStateTable.rows.length > 1) instStateTable.deleteRow(-1);
+            if (document.getElementById('buttonInstanceTable').value === 'HIDE DETAILS') {
+                services.forEach(srv => {
+                    srv.instances.forEach(obj => {
+                        const row = instStateTable.insertRow(-1);
+                        row.insertCell(-1).innerHTML = obj.service;
+                        row.insertCell(-1).innerHTML = obj.instance;
+                        row.insertCell(-1).innerHTML = obj.state;
+                        row.insertCell(-1).innerHTML = obj.date;
+                    });
+                });
+            }
+            UpdateTargetServices({ services: services.map(s => ({name: s.service})), changed: arg.service_list_changed });
+            const allInst = [];
+            services.forEach(s => s.instances.forEach(i => allInst.push({name: s.service + ':' + i.instance})));
+            UpdateTargetInstances({ instances: allInst, changed: arg.instance_list_changed });
+        }
 
+        function UpdateTargetServices(arg) {
+            const sel = document.getElementById("serviceSelector");
+            if (sel.options.length > 0 && arg.changed === 'false') return;
+            sel.innerHTML = '<option disabled>Choose Services</option><option selected>all</option>';
+            arg.services.forEach((s, i) => sel.add(new Option(s.name, i)));
+        }
+
+        function UpdateTargetInstances(arg) {
+            const sel = document.getElementById("instanceSelector");
+            if (sel.options.length > 0 && arg.changed === 'false') return;
+            sel.innerHTML = '<option disabled>Choose Instances</option><option selected>all</option>';
+            arg.instances.forEach((inst, i) => sel.add(new Option(inst.name, i)));
+        }
+    </script>
+</body>
 </html>
