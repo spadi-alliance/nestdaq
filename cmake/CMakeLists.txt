@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.24)
 
 project(nestdaq_external_dependencies LANGUAGES CXX C)
 
@@ -16,40 +16,32 @@ if(BUILD_PARALLEL_LEVEL)
   set(BUILD_PARALLEL_LEVEL "--parallel ${BUILD_PARALLEL_LEVEL}")
 endif()
 
-
-if(NOT ZeroMQ_VERSION)
-  set(ZeroMQ_VERSION "4.3.5")
-endif()
+set(ZeroMQ_VERSION "4.3.5" CACHE STRING "ZeroMQ version tag")
 include(${MY_CMAKE_FILES}ZeroMQ.cmake)
 
-if(NOT Boost_VERSION)
-  set(Boost_VERSION "1.85.0")
-endif()
+set(Boost_VERSION "1.85.0" CACHE STRING "boost version tag")
 include(${MY_CMAKE_FILES}Boost.cmake)
 
-if(NOT FairLogger_VERSION)
-  set(FairLogger_VERSION "2.3.0")
-endif()
+set(FairLogger_VERSION "2.3.0" CACHE STRING "FairLogger version tag")
 include(${MY_CMAKE_FILES}FairLogger.cmake)
 
-if(NOT FairMQ_VERSION)
-  set(FairMQ_VERSION "1.10.0")
-endif()
+set(FairMQ_VERSION "1.10.0" CACHE STRING "FairMQ version tag")
 include(${MY_CMAKE_FILES}FairMQ.cmake)
 
-if(NOT hiredis_VERSION)
-  set(hiredis_VERSION "1.3.0")
-endif()
+set(Redis_VERSION "8.6.2" CACHE STRING "Redis version tag")
+set(RedisBloom_VERSION "2.8.17" CACHE STRING "RedisBloom version tag")
+set(RediSearch_VERSION "2.10.25" CACHE STRING "RediSearch version tag")
+set(RedisJSON_VERSION "2.8.16" CACHE STRING "RedisJSON version tag")
+set(RedisTimeSeries_VERSION "1.12.9" CACHE STRING "RedisTimeSeries version tag")
+include(${MY_CMAKE_FILES}redis-stack.cmake)
+
+set(hiredis_VERSION "1.3.0" CACHE STRING "hiredis version tag")
 include(${MY_CMAKE_FILES}hiredis.cmake)
 
-if(NOT redis_plus_plus_VERSION)
-  set(redis_plus_plus_VERSION "1.3.15")
-endif()
+set(redis_plus_plus_VERSION "1.3.15" CACHE STRING "redis++ version tag")
 include(${MY_CMAKE_FILES}redis_plus_plus.cmake)
 
 if(WITH_OTEL_CPP)
-  if(NOT opentelemetry-cpp_VERSION)
-    set(opentelemetry-cpp_VERSION "1.24.0")
-  endif()
+  set(opentelemetry-cpp_VERSION "1.24.0" CACHE STRING "opentelemetry-cpp version tag")
   include(${MY_CMAKE_FILES}opentelemetry-cpp.cmake)
 endif()
