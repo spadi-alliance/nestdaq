@@ -1,118 +1,124 @@
-#include <fairmq/FairMQLogger.h>
+/** @file
+ *  @brief Implements HTTP request handling for the DAQ web controller.
+ */
+
+#include <fairlogger/Logger.h>
 
 #include "controller/websocket_session.h"
 #include "controller/http_session.h"
 
-//_____________________________________________________________________________
-http_session::queue::queue(http_session& self)
-    : self_(self)
+static constexpr std::uint64_t kHttpBodyLimit{10000};
+static constexpr int kHttpSessionTimeoutSeconds{30};
+
+HttpSession::Queue::Queue(HttpSession& self)
+    : fSelf(self)
 {
-    static_assert(limit > 0, "queue limit must be positive");
-    items_.reserve(limit);
+    static_assert(kLimit > 0, "queue limit must be positive");
+    fItems.reserve(kLimit);
 }
 
-//_____________________________________________________________________________
-bool http_session::queue::on_write()
+bool HttpSession::Queue::onWrite()
 {
-    BOOST_ASSERT(! items_.empty());
-    auto const was_full = is_full();
-    items_.erase(items_.begin());
-    if(! items_.empty())
-        (*items_.front())();
-    return was_full;
+    BOOST_ASSERT(! fItems.empty());
+    auto const kWasFull = isFull();
+    fItems.erase(fItems.begin());
+    if(! fItems.empty()) {
+        (*fItems.front())();
+    }
+    return kWasFull;
 }
 
 //=============================================================================
 
-//_____________________________________________________________________________
-http_session::http_session(tcp::socket&& socket, std::shared_ptr<std::string const> const& doc_root)
-    : stream_(std::move(socket))
-    , doc_root_(doc_root)
-    , queue_(*this)
+HttpSession::HttpSession(tcp::socket&& socket, std::shared_ptr<std::string const> const& doc_root)
+    : fStream(std::move(socket))
+    , fDocRoot(doc_root)
+    , fQueue(*this)
 {
 }
 
-//_____________________________________________________________________________
-void http_session::do_read()
+void HttpSession::doRead()
 {
     // Construct a new parser for each message
-    parser_.emplace();
+    fParser.emplace();
 
     // Apply a reasonable limit to the allowed size
     // of the body in bytes to prevent abuse.
-    parser_->body_limit(10000);
+    fParser->body_limit(kHttpBodyLimit);
 
     // Set the timeout.
-    stream_.expires_after(std::chrono::seconds(30));
+    fStream.expires_after(std::chrono::seconds(kHttpSessionTimeoutSeconds));
 
     // Read a request using the parser-oriented interface
-    http::async_read(stream_, buffer_, *parser_,
-                     beast::bind_front_handler(&http_session::on_read, shared_from_this())
+    http::async_read(fStream, fBuffer, *fParser,
+                     beast::bind_front_handler(&HttpSession::onRead, shared_from_this())
                     );
 }
 
-//_____________________________________________________________________________
-void http_session::on_read(beast::error_code ec, std::size_t bytes_transferred)
+void HttpSession::onRead(beast::error_code ec, std::size_t bytes_transferred)
 {
     boost::ignore_unused(bytes_transferred);
 
     // This means they closed the connection
     if(ec == http::error::end_of_stream) {
-        LOG(warn)  << "boost::beast http session: what = " << ec.what() << std::endl;
-        return do_close();
+        LOG(warn)  << "boost::beast http session: what = " << ec.what() << '\n';
+        doClose();
+        return;
     }
 
     if(ec) {
-        return fail(ec, "http read");
+        fail(ec, "http read");
+        return;
     }
 
-    LOG(debug) << " parser_->get() " << parser_->get();
+    LOG(debug) << " fParser->get() " << fParser->get();
     // See if it is a WebSocket Upgrade
-    if(websocket::is_upgrade(parser_->get())) {
+    if(websocket::is_upgrade(fParser->get())) {
         // Create a websocket session, transferring ownership
         // of both the socket and the HTTP request.
-        std::make_shared<websocket_session>(stream_.release_socket())->do_accept(parser_->release());
+        std::make_shared<WebSocketSession>(fStream.release_socket())->doAccept(fParser->release());
         return;
     }
 
     // Send the response
-    handle_request(*doc_root_, parser_->release(), queue_);
+    handleRequest(*fDocRoot, fParser->release(), fQueue);
 
     // If we aren't at the queue limit, try to pipeline another request
-    if(! queue_.is_full()) {
-        do_read();
+    if(! fQueue.isFull()) {
+        doRead();
     }
 }
 
-//_____________________________________________________________________________
-void http_session::on_write(bool close, beast::error_code ec, std::size_t bytes_transferred)
+void HttpSession::onWrite(bool close, beast::error_code ec, std::size_t bytes_transferred)
 {
     boost::ignore_unused(bytes_transferred);
 
     if(ec) {
-        return fail(ec, "http write");
+        fail(ec, "http write");
+        return;
     }
 
     if(close) {
         // This means we should close the connection, usually because
         // the response indicated the "Connection: close" semantic.
-        return do_close();
+        doClose();
+        return;
     }
 
     // Inform the queue that a write completed
-    if(queue_.on_write()) {
+    if(fQueue.onWrite()) {
         // Read another request
-        do_read();
+        doRead();
     }
 }
 
-//_____________________________________________________________________________
-void http_session::do_close()
+void HttpSession::doClose()
 {
     // Send a TCP shutdown
     beast::error_code ec;
     LOG(debug) << "boost::beast http session: Send a TCP shutdown";
-    stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+    const auto kShutdownResult = fStream.socket().shutdown(tcp::socket::shutdown_send, ec);
+    boost::ignore_unused(kShutdownResult);
 
     // At this point the connection is closed gracefully
 }

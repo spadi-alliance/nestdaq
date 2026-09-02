@@ -1,0 +1,26 @@
+services:
+  clickstack:
+    image: ${CLICKSTACK_IMAGE:-docker.io/clickhouse/clickstack-all-in-one:2}
+    container_name: clickstack
+    command: ["clickstack"]
+    ports:
+      - "${CLICKSTACK_UI_PORT:-8080}:8080"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ${CLICKSTACK_DB_DIR:-./clickstack-db}:/data/db:Z
+      - ${CLICKSTACK_CLICKHOUSE_DATA_DIR:-./clickstack-clickhouse-data}:/var/lib/clickhouse:Z
+      - ${CLICKSTACK_CLICKHOUSE_LOG_DIR:-./clickstack-clickhouse-logs}:/var/log/clickhouse-server:Z
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks:
+      - otel-clickstack-net
+
+networks:
+  otel-clickstack-net:
+    name: otel-clickstack-net

@@ -7,6 +7,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/start_device.sh.in ${CMAKE_CURRENT_BI
 
 install(PROGRAMS
   ${CMAKE_CURRENT_BINARY_DIR}/start_device.sh;
+  generate-device-skeleton.py;
   mq-param.sh;
   topology-1-1.sh;
   topology-n-n-m.sh;

@@ -1,0 +1,43 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set(_NestDAQ_dependency_prefixes
+  "@FairMQ_PREFIX@"
+  "@CMAKE_INSTALL_PREFIX@"
+  "${PACKAGE_PREFIX_DIR}"
+)
+foreach(_NestDAQ_dependency_prefix IN LISTS _NestDAQ_dependency_prefixes)
+  if(_NestDAQ_dependency_prefix AND EXISTS "${_NestDAQ_dependency_prefix}")
+    list(PREPEND CMAKE_PREFIX_PATH "${_NestDAQ_dependency_prefix}")
+  endif()
+endforeach()
+unset(_NestDAQ_dependency_prefix)
+unset(_NestDAQ_dependency_prefixes)
+
+find_dependency(FairMQ)
+
+if(FairMQ_FOUND)
+  foreach(dep IN LISTS FairMQ_PACKAGE_DEPENDENCIES)
+    if(FairMQ_${dep}_COMPONENTS)
+      if(dep MATCHES "Boost")
+        find_dependency(${dep} ${FairMQ_${dep}_VERSION}
+          COMPONENTS ${FairMQ_${dep}_COMPONENTS} iostreams thread)
+      else()
+        find_dependency(${dep} ${FairMQ_${dep}_VERSION}
+          COMPONENTS ${FairMQ_${dep}_COMPONENTS})
+      endif()
+    else()
+      find_dependency(${dep} ${FairMQ_${dep}_VERSION})
+    endif()
+  endforeach()
+endif()
+
+if(NOT FairLogger_INCDIR)
+  set(FairLogger_INCDIR "${FairMQ_INCDIR}/fairlogger/bundled")
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/NestDAQVersion.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/NestDAQTargets.cmake")
+
+check_required_components(NestDAQ)

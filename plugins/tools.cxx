@@ -1,3 +1,7 @@
+/** @file
+ *  @brief Implements shared plugin utility functions.
+ */
+
 #include <chrono>
 #include <ctime>
 #include <iomanip> // for std::put_time 
@@ -8,24 +12,29 @@
 #include <boost/asio.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
+#include <fairlogger/Logger.h>
+
 #include "plugins/tools.h"
 
 namespace bpo = boost::program_options;
 namespace net = boost::asio;
 
-//_____________________________________________________________________________
-std::string date()
+std::string currentDate()
 {
-    auto timePoint = std::chrono::system_clock::now();
-    auto t         = std::chrono::system_clock::to_time_t(timePoint);
-    const auto lt  = std::localtime(&t);
+    auto time_point = std::chrono::system_clock::now();
+    auto t         = std::chrono::system_clock::to_time_t(time_point);
+    std::tm lt{};
+#ifdef _WIN32
+    localtime_s(&lt, &t);
+#else
+    localtime_r(&t, &lt);
+#endif
     std::ostringstream ret;
-    ret << std::put_time(lt, "%Y-%m-%d %H:%M:%S");
+    ret << std::put_time(&lt, "%Y-%m-%d %H:%M:%S");
     return ret.str();
 }
 
-//_____________________________________________________________________________
-std::string GetIPv4FromHostname(const std::string& name)
+std::string getIPv4FromHostname(const std::string& name)
 {
     try {
         net::io_context ioc;
@@ -39,15 +48,14 @@ std::string GetIPv4FromHostname(const std::string& name)
             ss <<  it->endpoint().address();
             return ss.str();
         }
-        std::cerr << "could not find ipv4 address for hostname '" << name << "'";
+        LOG(error) << "could not find ipv4 address for hostname '" << name << "'";
     } catch (const std::exception &e) {
-        std::cerr << "could not resolve hostname '" << name << "', reason: " << e.what() << std::endl;
+        LOG(error) << "could not resolve hostname '" << name << "', reason: " << e.what();
     }
     return "";
 }
 
-//_____________________________________________________________________________
-int ParseCommandLine(int argc, char* argv[],
+int parseCommandLine(int argc, char* argv[], // NOLINT(cppcoreguidelines-avoid-c-arrays)
                      const bpo::options_description& options,
                      bpo::variables_map& vm)
 {
@@ -61,34 +69,32 @@ int ParseCommandLine(int argc, char* argv[],
         }
 
     } catch (const bpo::error_with_option_name &e) {
-        std::cerr << "#Exception: boost program options error: " << e.what() << std::endl;
+        LOG(error) << "#Exception: boost program options error: " << e.what();
         ret = EXIT_FAILURE;
     } catch (const std::exception &e) {
-        std::cerr << "#Exception: unhandled exception: " << e.what() << std::endl;
+        LOG(error) << "#Exception: unhandled exception: " << e.what();
         ret = EXIT_FAILURE;
     } catch (...) {
-        std::cerr << "#Exception: unknown exception ..." << std::endl;
+        LOG(error) << "#Exception: unknown exception ...";
         ret = EXIT_FAILURE;
     }
 
     if (ret != EXIT_SUCCESS) {// || argc == 1) {
-        std::cout << options << std::endl;
+        std::cout << options << '\n';
         ret = EXIT_FAILURE;
     }
     return ret;
 }
 
-//_____________________________________________________________________________
-boost::property_tree::ptree to_json(std::string_view s)
+boost::property_tree::ptree toJson(std::string_view s)
 {
-    std::istringstream iss(s.data());
+    std::istringstream iss(std::string{s});
     boost::property_tree::ptree ret;
-    boost::property_tree::read_json(iss, ret);
+    boost::property_tree::read_json(iss, ret); // NOLINT(clang-analyzer-optin.cplusplus.UninitializedObject)
     return ret;
 }
 
-//_____________________________________________________________________________
-std::string to_string(const boost::property_tree::ptree& pt, bool pretty)
+std::string toJsonString(const boost::property_tree::ptree& pt, bool pretty)
 {
     std::ostringstream oss;
     boost::property_tree::write_json(oss, pt, pretty);
