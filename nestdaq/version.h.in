@@ -1,0 +1,31 @@
+#ifndef nestdaq_version_h
+#define nestdaq_version_h
+
+#include <cstdint>
+#include <string_view>
+
+static constexpr std::string_view NESTDAQ_VERSION("@PROJECT_VERSION@");
+
+static constexpr uint64_t NESTDAQ_VERSION_DEC \
+    = (@PROJECT_VERSION_MAJOR@ * 10000) \
+      + (@PROJECT_VERSION_MINOR@ *   100) \
+      + (@PROJECT_VERSION_PATCH@ *     1);
+
+static constexpr uint64_t NESTDAQ_VERSION_MAJOR = @PROJECT_VERSION_MAJOR@;
+static constexpr uint64_t NESTDAQ_VERSION_MINOR = @PROJECT_VERSION_MINOR@;
+static constexpr uint64_t NESTDAQ_VERSION_PATCH = @PROJECT_VERSION_PATCH@;
+
+static constexpr std::string_view NESTDAQ_VERSION_PRERELEASE("@PROJECT_VERSION_PRERELEASE@"); // NOLINT(readability-redundant-string-init)
+
+static constexpr std::string_view NESTDAQ_BUILD_TYPE("@CMAKE_BUILD_TYPE@"); // NOLINT(readability-redundant-string-init)
+
+static constexpr std::string_view NESTDAQ_GIT_COMMIT_DATE("@GIT_COMMIT_DATE@");
+
+static constexpr std::string_view NESTDAQ_GIT_BRANCH("@GIT_BRANCH@");
+static constexpr std::string_view NESTDAQ_GIT_REMOTE_URL("@GIT_REMOTE_URL@");
+static constexpr uint64_t NESTDAQ_GIT_COMMIT_COUNT = @COMMIT_COUNT@;
+static constexpr uint64_t NESTDAQ_GIT_COMMIT_HASH  = 0x@COMMIT_HASH@;
+static constexpr std::string_view NESTDAQ_GIT_COMMIT_HASH_STRING("@COMMIT_HASH@");
+
+
+#endif // nestdaq_version_h

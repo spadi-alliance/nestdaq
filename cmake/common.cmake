@@ -6,16 +6,20 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD ${MY_CXX_STANDARD})
 elseif(${CMAKE_CXX_STANDARD} LESS ${MY_CXX_STANDARD})
   message(FATAL_ERROR "A minimum CMAKE_CXX_STANDARD of ${MY_CXX_STANDARD} is required.")
-elseif(${CMAKE_CXX_STANDARD} GREATER ${MY_CXX_STANDARD})
-  message(WARNING "A CMAKE_CXX_STANDARD of ${CMAKE_CXX_STANDARD} (greater than ${MY_CXX_STANDARD}) is not tested. Use on your on risk.")
 endif()
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ExternalProject_Add supports DOWNLOAD_EXTRACT_TIMESTAMP only with CMake 3.24
+# or later. Keep it conditional so dependency builds still work with CMake 3.22.
+set(NESTDAQ_DOWNLOAD_EXTRACT_TIMESTAMP_ARGS)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+  set(NESTDAQ_DOWNLOAD_EXTRACT_TIMESTAMP_ARGS DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+endif()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wshadow -Wfloat-equal")
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -DNDEBUG -march=native")
 message(STATUS "")
 message(STATUS "CMAKE_PREFIX_PATH:              ${CMAKE_PREFIX_PATH}")
 message(STATUS "CMAKE_CXX_FLAGS:                ${CMAKE_CXX_FLAGS}")

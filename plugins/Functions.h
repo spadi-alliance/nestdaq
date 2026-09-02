@@ -1,5 +1,9 @@
-#ifndef DaqService_Plugins_Functions_h
-#define DaqService_Plugins_Functions_h
+#pragma once
+
+/**
+ * @file Functions.h
+ * @brief Small Redis and string helper functions used by DAQ service plugins.
+ */
 
 #include <string>
 #include <string_view>
@@ -10,18 +14,22 @@
 
 #include <sw/redis++/redis++.h>
 
-namespace daq::service {
+namespace nestdaq::daq::service {
 
-//_____________________________________________________________________________
+/**
+ * @brief Join Redis key components with the configured separator.
+ */
 inline std::string join(const std::vector<std::string> &v, std::string_view separator)
 {
     return boost::join(v, separator.data());
 }
 
-//_____________________________________________________________________________
+/**
+ * @brief Scan Redis keys matching @p pattern and return all matches.
+ */
 inline std::unordered_set<std::string> scan(sw::redis::Redis &r,
         std::string_view pattern,
-        long long cursor=0LL)
+        sw::redis::Cursor cursor=0)
 {
     std::unordered_set<std::string> keys;
     while (true) {
@@ -33,15 +41,15 @@ inline std::unordered_set<std::string> scan(sw::redis::Redis &r,
     return keys;
 }
 
-//_____________________________________________________________________________
+/**
+ * @brief Build a scan pattern from key components and scan Redis for matches.
+ */
 inline std::unordered_set<std::string> scan(sw::redis::Redis &r,
         const std::vector<std::string>& v,
         std::string_view separator,
-        long long cursor=0LL)
+        sw::redis::Cursor cursor=0)
 {
     return scan(r, boost::join(v, separator.data()), cursor);
 }
 
-} // namespace daq::service
-
-#endif
+} // namespace nestdaq::daq::service

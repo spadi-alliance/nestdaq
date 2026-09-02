@@ -1,0 +1,108 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -bugprone-empty-catch,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-lambda-function-name,
+  -bugprone-narrowing-conversions,
+  -bugprone-suspicious-stringview-data-usage,
+  -bugprone-unchecked-optional-access,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-narrowing-conversions,
+  -modernize-avoid-c-arrays,
+  -modernize-raw-string-literal,
+  -modernize-use-equals-default,
+  -modernize-use-nodiscard,
+  -modernize-use-constraints,
+  -modernize-use-integer-sign-comparison,
+  -modernize-use-ranges,
+  -modernize-use-starts-ends-with,
+  -modernize-use-trailing-return-type,
+  -modernize-use-using,
+  -modernize-use-emplace,
+  -performance-avoid-endl,
+  -performance-enum-size,
+  -performance-faster-string-find,
+  -performance-inefficient-string-concatenation,
+  -performance-unnecessary-value-param,
+  -readability-container-contains,
+  -readability-const-return-type,
+  -readability-else-after-return,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-magic-numbers,
+  -readability-qualified-auto,
+  -readability-redundant-control-flow,
+  -readability-redundant-string-cstr,
+  -readability-uppercase-literal-suffix,
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|.*/)(nestdaq|plugins|controller|examples)/.*'
+FormatStyle: none
+CheckOptions:
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: '1'
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassIgnoredRegexp
+    value: '^(logger|options_description|sink|variables_map)$'
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructIgnoredRegexp
+    value: '^nestdaq_otel_.*$'
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumIgnoredRegexp
+    value: '^nestdaq_otel_.*$'
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefIgnoredRegexp
+    value: '^nestdaq_otel_.*$'
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: '(^[A-Z][a-zA-Z0-9]*$|^nestdaq_otel_.*$)'
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableIgnoredRegexp
+    value: '^[a-z][a-zA-Z0-9]*$'
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: f
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.ProtectedMemberPrefix
+    value: f
+  - key: readability-identifier-naming.ClassMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassMemberPrefix
+    value: fg
+  - key: readability-identifier-naming.StaticVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.StaticVariablePrefix
+    value: g
+  - key: readability-identifier-naming.ConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstantPrefix
+    value: k
+  - key: readability-identifier-naming.ConstantIgnoredRegexp
+    value: '^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantIgnoredRegexp
+    value: '^(k[A-Z][a-zA-Z0-9]*|[A-Z][A-Z0-9]*(_[A-Z0-9]+)*)$'
+...

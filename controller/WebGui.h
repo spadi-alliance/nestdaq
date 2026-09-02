@@ -1,5 +1,9 @@
-#ifndef WebGui_h
-#define WebGui_h
+#pragma once
+
+/**
+ * @file WebGui.h
+ * @brief Redis-backed command handler for the web DAQ controller.
+ */
 
 #include <functional>
 #include <list>
@@ -30,99 +34,104 @@ struct ServiceState {
     std::string date;
 };
 
+/**
+ * @brief Controller-side command dispatcher and Redis state reader.
+ */
 class WebGui {
 public:
     using ProcessDataFunc    = std::function<void (unsigned int, const boost::property_tree::ptree&)>;
     WebGui() {
-        InitializeFunctionList();
+        initializeFunctionList();
     }
     WebGui(const WebGui &) = delete;
     WebGui& operator=(const WebGui &) = delete;
+    WebGui(WebGui&&) = delete;
+    WebGui& operator=(WebGui&&) = delete;
     ~WebGui() {
-        Send(0, "Disconnected.");
+        send(0, "Disconnected.");
     }
 
-    // add function to the list for ProcessData
-    void AddFunction(const std::string& command, ProcessDataFunc f) {
+    // add function to the list for processData
+    void addFunction(const std::string& command, const ProcessDataFunc& f) {
         fFuncList.emplace(command, f);
     }
-    void AddFunction(const std::unordered_map<std::string, ProcessDataFunc>& table) {
+    void addFunction(const std::unordered_map<std::string, ProcessDataFunc>& table) {
         fFuncList.insert(table.cbegin(), table.cend());
     }
 
-    bool ConnectToRedis(std::string_view redisUri,
-                        std::string_view commandChanenlName,
+    bool connectToRedis(std::string_view redis_uri,
+                        std::string_view command_channel_name,
                         std::string_view separator);
 
     // read/write operation on redis and send the value to the web client
-    void CopyLatestRunNumber(unsigned int connid);
+    void copyLatestRunNumber(unsigned int conn_id);
 
-    const std::string& GetChannelPrefix() const {
+    const std::string& getChannelPrefix() const {
         return fChannelName;
     }
-    const std::string& GetSeparator() const {
+    const std::string& getSeparator() const {
         return fSeparator;
     }
-    std::shared_ptr<sw::redis::Redis> GetRedisClient() {
+    std::shared_ptr<sw::redis::Redis> getRedisClient() {
         return fClient;
     }
 
-    void InitializeFunctionList();
-    void ProcessData(unsigned int connid, const std::string& arg);
+    void initializeFunctionList();
+    void processData(unsigned int conn_id, const std::string& arg);
 
     // send message to the web client/clients
-    void Send(unsigned int connid, const std::string& arg) {
-        fSend(connid, arg);
+    void send(unsigned int conn_id, const std::string& arg) {
+        fSend(conn_id, arg);
     }
 
-    // Send the list of the client's connection id
-    void SendWebSocketIdList(const std::vector<std::pair<unsigned int, std::string>> &v);
+    // send the list of the client's connection id
+    void sendWebSocketIdList(const std::vector<std::pair<unsigned int, std::string>> &v);
 
-    void SetPollIntervalMS(uint64_t t) {
-        fPollIntervalMS = t;
+    void setPollIntervalMs(uint64_t t) {
+        fPollIntervalMs = t;
     }
-    void SetPostRunCommand(std::string_view value) {
+    void setPostRunCommand(std::string_view value) {
         fPostRunCommand = value.data();
     }
-    void SetPostStopCommand(std::string_view value) {
+    void setPostStopCommand(std::string_view value) {
         fPostStopCommand = value.data();
     }
-    void SetPreRunCommand(std::string_view value) {
+    void setPreRunCommand(std::string_view value) {
         fPreRunCommand = value.data();
     }
-    void SetPreStopCommand(std::string_view value) {
+    void setPreStopCommand(std::string_view value) {
         fPreStopCommand = value.data();
     }
-    void SetSendFunction(std::function<void (unsigned int, const std::string&)> f) {
-        fSend = f;
+    void setSendFunction(std::function<void (unsigned int, const std::string&)> f) {
+        fSend = std::move(f);
     }
-    void SetTerminateFunction(std::function<void (void)> f) {
-        fTerminate = f;
+    void setTerminateFunction(std::function<void (void)> f) {
+        fTerminate = std::move(f);
     }
 
     // terminate this webgui daq controller
-    void Terminate() {
+    void terminate() {
         fTerminate();
     }
 
 private:
     // increment operation on redis and send the result to the web client
-    void IncrementRunNumber(unsigned int connid);
-    void PollState();
-    void ProcessExpiredKey(std::string_view key);
+    void incrementRunNumber(unsigned int conn_id);
+    void pollState();
+    void processExpiredKey(std::string_view key);
     // read operation on redis (and send the returned value to the web client)
-    void ReadCommandChannel(unsigned int connid);
-    void ReadLatestRunNumber(unsigned int connid);
-    void ReadRunNumber(unsigned int connid);
-    void RedisGet(unsigned int connid, const boost::property_tree::ptree &arg);
-    void RedisIncr(unsigned int connid, const boost::property_tree::ptree &arg);
+    void readCommandChannel(unsigned int conn_id);
+    void readLatestRunNumber(unsigned int conn_id);
+    void readRunNumber(unsigned int conn_id);
+    void redisGet(unsigned int conn_id, const boost::property_tree::ptree &arg);
+    void redisIncr(unsigned int conn_id, const boost::property_tree::ptree &arg);
     // send command via redis pub/sub channels
-    void RedisPublishDaqCommand(unsigned int connid, const boost::property_tree::ptree& arg);
-    void RedisSet(unsigned int connid, const boost::property_tree::ptree& arg);
-    void SendStateSummary(const std::map<std::string, ServiceState> &summaryTable);
-    void SubscribeToRedisPubSub();
-    void Wait(const std::unordered_set<std::string> &services, const std::unordered_set<std::string> &instances, const std::vector<std::string> &waitStateTargets);
-    void Wait(const std::vector<std::string> &keys, const std::vector<std::string> &waitStateTargets);
+    void redisPublishDaqCommand(unsigned int conn_id, const boost::property_tree::ptree& arg);
+    void redisSet(unsigned int conn_id, const boost::property_tree::ptree& arg);
+    void sendStateSummary(const std::map<std::string, ServiceState> &summary_table);
+    void subscribeToRedisPubSub();
+    void wait(const std::unordered_set<std::string> &services, const std::unordered_set<std::string> &instances, const std::vector<std::string> &wait_state_targets);
+    void wait(const std::vector<std::string> &keys, const std::vector<std::string> &wait_state_targets);
 
     std::mutex fMutex;
     std::unordered_map<std::string, ProcessDataFunc> fFuncList;
@@ -143,9 +152,7 @@ private:
     std::string fRedisKeyEventChannelName;
     std::thread fRedisPubSubListenThread;
     std::thread fStatePollThread;
-    uint64_t fPollIntervalMS{0};
+    uint64_t fPollIntervalMs{0};
 
-    bool fRecreateTS;
+    bool fRecreateTs{false};
 };
-
-#endif
