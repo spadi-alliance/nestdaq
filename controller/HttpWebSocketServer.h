@@ -1,7 +1,9 @@
-#ifndef HTTP_WebSocketServer_h
-#define HTTP_WebSocketServer_h
+#pragma once
 
-// HTTP and WebSocket server using boost::beast
+/**
+ * @file HttpWebSocketServer.h
+ * @brief HTTP and WebSocket server wrapper used by `daq-webctl`.
+ */
 
 #include <memory>
 #include <string_view>
@@ -10,24 +12,24 @@
 
 #include "controller/beast_tools.h"
 
-class listener;
+class Listener;
 
 class HttpWebSocketServer
 {
 public:
-    explicit HttpWebSocketServer(int nThreads);
+    explicit HttpWebSocketServer(int n_threads);
     HttpWebSocketServer(const HttpWebSocketServer&) = delete;
     HttpWebSocketServer& operator=(const HttpWebSocketServer&) = delete;
+    HttpWebSocketServer(HttpWebSocketServer&&) = delete;
+    HttpWebSocketServer& operator=(HttpWebSocketServer&&) = delete;
     ~HttpWebSocketServer();
 
-    void Run(std::string_view scheme, std::string_view address, std::string_view port, std::string_view doc_root);
+    void run(std::string_view scheme, std::string_view address, std::string_view port, std::string_view doc_root);
 
 private:
     std::shared_ptr<net::io_context> fContext;
     int fNThreads{0};
-    std::shared_ptr<listener> fListener;
+    std::shared_ptr<Listener> fListener;
     std::shared_ptr<net::signal_set> fSignals;
     std::vector<std::thread> fThreads;
 };
-
-#endif

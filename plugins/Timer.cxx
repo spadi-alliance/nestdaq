@@ -1,47 +1,59 @@
+/** @file
+ *  @brief Implements periodic timer utilities used by plugins.
+ */
+
 #include <chrono>
-#include <iostream>
+#include <utility>
+
+#include <boost/system/error_code.hpp>
+
+#include <fairlogger/Logger.h>
 
 #include "plugins/Timer.h"
 
-//______________________________________________________________________________
-daq::service::Timer::~Timer()
+namespace nestdaq::daq::service {
+
+Timer::~Timer() noexcept
 {
-    fTimer->cancel();
+    if (fTimer) {
+        boost::system::error_code ec;
+        fTimer->cancel(ec);
+    }
 }
 
-//______________________________________________________________________________
-void daq::service::Timer::Start(const std::shared_ptr<net::io_context> &ctx,
-                                //const std::shared_ptr<strand_t> &strand,
-                                unsigned int timeoutMS,
-                                std::function<bool(const std::error_code &)> f)
+void Timer::start(const std::shared_ptr<net::io_context> &ctx,
+                  //const std::shared_ptr<strand_t> &strand,
+                  unsigned int timeout_ms,
+                  std::function<bool(const std::error_code &)> f)
 {
-    // std::cout << " timer start " << timeoutMS << " msec" << std::endl;
+    // std::cout << " timer start " << timeout_ms << " msec" << std::endl;
     fContext   = ctx;
 // fStrand    = strand;
     fTimer     = std::make_unique<net::steady_timer>(*fContext);
-    fTimeoutMS = timeoutMS;
-    fHandle    = f;
-    Start();
+    fTimeoutMs = timeout_ms;
+    fHandle    = std::move(f);
+    start();
 }
 
-//_____________________________________________________________________________
-void daq::service::Timer::Start()
+void Timer::start()
 {
-    fTimer->expires_after(std::chrono::milliseconds(fTimeoutMS));
+    fTimer->expires_after(std::chrono::milliseconds(fTimeoutMs));
     fTimer->async_wait( //
     [this](const auto &ec) {
         // std::cout << "# timer canceled : " << ec.message() << std::endl;
         if (ec == std::errc::operation_canceled) {
-            std::cout << " timer canceled : " << ec.message() << std::endl;
+            LOG(debug) << " timer canceled : " << ec.message();
         } else if (ec) {
-            std::cout << " error. timer stopped: " << ec.message() << std::endl;
+            LOG(debug) << " error. timer stopped: " << ec.message();
         } else {
             if (!fHandle(ec)) {
                 // std::cout << " restart timer" << std::endl;
                 fTimer->cancel();
-                Start();
+                start();
             }
             // std::cout << " no restart timer" << std::endl;
         }
     });
 }
+
+} // namespace nestdaq::daq::service

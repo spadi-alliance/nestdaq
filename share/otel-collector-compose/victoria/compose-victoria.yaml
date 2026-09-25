@@ -1,0 +1,74 @@
+services:
+  victoriametrics:
+    image: ${VICTORIAMETRICS_IMAGE:-docker.io/victoriametrics/victoria-metrics:v1.143.0}
+    container_name: victoriametrics
+    command:
+      - -storageDataPath=/victoria-metrics-data
+    ports:
+      - "${VICTORIAMETRICS_PORT:-8428}:8428"
+    volumes:
+      - ${VICTORIAMETRICS_DATA_DIR:-./victoriametrics-data}:/victoria-metrics-data:Z
+    networks:
+      - otel-victoria-net
+
+  victorialogs:
+    image: ${VICTORIALOGS_IMAGE:-docker.io/victoriametrics/victoria-logs:v1.50.0}
+    container_name: victorialogs
+    command:
+      - -storageDataPath=/victoria-logs-data
+    ports:
+      - "${VICTORIALOGS_PORT:-9428}:9428"
+    volumes:
+      - ${VICTORIALOGS_DATA_DIR:-./victorialogs-data}:/victoria-logs-data:Z
+    networks:
+      - otel-victoria-net
+
+  victoriatraces:
+    image: ${VICTORIATRACES_IMAGE:-docker.io/victoriametrics/victoria-traces:v0.8.2}
+    container_name: victoriatraces
+    command:
+      - -storageDataPath=/victoria-traces-data
+    ports:
+      - "${VICTORIATRACES_PORT:-10428}:10428"
+    volumes:
+      - ${VICTORIATRACES_DATA_DIR:-./victoriatraces-data}:/victoria-traces-data:Z
+    networks:
+      - otel-victoria-net
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-docker.io/grafana/grafana:12.4.0}
+    container_name: grafana
+    environment:
+      GF_INSTALL_PLUGINS: "victoriametrics-metrics-datasource,victoriametrics-logs-datasource"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ${GRAFANA_DATA_DIR:-./grafana-data}:/var/lib/grafana:Z
+      - ${GRAFANA_PROVISIONING_DIR:-./grafana/provisioning}:/etc/grafana/provisioning:ro,Z
+    depends_on:
+      - victoriametrics
+      - victorialogs
+      - victoriatraces
+    networks:
+      - otel-victoria-net
+
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:-docker.io/otel/opentelemetry-collector-contrib:0.155.0}
+    container_name: otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ${OTEL_COLLECTOR_CONFIG_FILE:-./otel-collector-config-victoria.yaml}:/etc/otel/config.yaml:ro,Z
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    depends_on:
+      - victoriametrics
+      - victorialogs
+      - victoriatraces
+    networks:
+      - otel-victoria-net
+
+networks:
+  otel-victoria-net:
+    name: otel-victoria-net

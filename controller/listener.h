@@ -1,7 +1,9 @@
-#ifndef TCP_Listener_h
-#define TCP_Listener_h
+#pragma once
 
-// Accepts incoming connections and launches the sessions
+/**
+ * @file listener.h
+ * @brief TCP acceptor that launches HTTP/WebSocket sessions.
+ */
 
 #include <memory>
 #include <string>
@@ -9,29 +11,27 @@
 
 #include "controller/beast_tools.h"
 
-class listener : public std::enable_shared_from_this<listener>
+class Listener : public std::enable_shared_from_this<Listener>
 {
 public:
-    static constexpr std::string_view StatusGood {"good"};
-    listener(const std::shared_ptr<net::io_context> &ioc, tcp::endpoint endpoint, std::shared_ptr<std::string const> const& doc_root);
+    static constexpr std::string_view kStatusGood {"good"};
+    Listener(const std::shared_ptr<net::io_context> &ioc, const tcp::endpoint& endpoint, std::shared_ptr<std::string const> const& doc_root);
 
-    const std::string get_status() const {
-        return status_;
+    std::string getStatus() const {
+        return fStatus;
     }
 
     // Start accepting incoming connections
     void run() {
-        do_accept();
+        doAccept();
     }
 
 private:
-    std::shared_ptr<net::io_context> ioc_;
-    tcp::acceptor acceptor_;
-    std::shared_ptr<std::string const> doc_root_;
-    std::string status_;
+    std::shared_ptr<net::io_context> fContext;
+    tcp::acceptor fAcceptor;
+    std::shared_ptr<std::string const> fDocRoot;
+    std::string fStatus;
 
-    void do_accept();
-    void on_accept(beast::error_code ec, tcp::socket socket);
+    void doAccept();
+    void onAccept(beast::error_code ec, tcp::socket socket);
 };
-
-#endif

@@ -1,16 +1,28 @@
-#ifndef Examples_NullDevice_h
-#define Examples_NullDevice_h
+#pragma once
 
-#if __has_include(<fairmq/Device.h>)
-#include <fairmq/Device.h> // since v1.4.34
-#else
-#include <fairmq/FairMQDevice.h>
+/**
+ * @file NullDevice.h
+ * @brief Example FairMQ device with lifecycle hooks and no data processing.
+ */
+
+#include <memory>
+
+#include <fairmq/Device.h>
+
+#if __has_include(<spdlog/spdlog.h>)
+namespace spdlog {
+class logger;
+} // namespace spdlog
 #endif
 
-class NullDevice : public FairMQDevice
+class NullDevice : public fair::mq::Device
 {
 public:
     NullDevice() = default;
+    NullDevice(const NullDevice&) = delete;
+    NullDevice& operator=(const NullDevice&) = delete;
+    NullDevice(NullDevice&&) = delete;
+    NullDevice& operator=(NullDevice&&) = delete;
     ~NullDevice() override = default;
 
 protected:
@@ -25,6 +37,8 @@ protected:
     void ResetTask() override;
     void Run() override;
 
-};
-
+private:
+#if __has_include(<spdlog/spdlog.h>)
+    std::shared_ptr<spdlog::logger> fLogger;
 #endif
+};

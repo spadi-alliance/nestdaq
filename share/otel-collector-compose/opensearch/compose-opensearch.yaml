@@ -1,0 +1,72 @@
+services:
+  opensearch:
+    image: ${OPENSEARCH_IMAGE:-docker.io/opensearchproject/opensearch:2.19.5}
+    container_name: opensearch
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - ${OPENSEARCH_DATA_DIR:-./opensearch-data}:/usr/share/opensearch/data:Z
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks:
+      - otel-opensearch-net
+
+  opensearch-dashboards:
+    image: ${OPENSEARCH_DASHBOARDS_IMAGE:-docker.io/opensearchproject/opensearch-dashboards:2.19.5}
+    container_name: dashboards
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    volumes:
+      - ${OPENSEARCH_DASHBOARDS_CONFIG_FILE:-./opensearch_dashboards.yaml}:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yaml:ro,Z
+    ports:
+      - "${OPENSEARCH_DASHBOARDS_PORT:-5601}:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - otel-opensearch-net
+
+  opensearch-dashboards-setup:
+    image: ${OPENSEARCH_DASHBOARDS_IMAGE:-docker.io/opensearchproject/opensearch-dashboards:2.19.5}
+    container_name: dashboards-setup
+    environment:
+      OPENSEARCH_DASHBOARDS_URL: "http://opensearch-dashboards:5601"
+    command:
+      - /usr/share/opensearch-dashboards/node/bin/node
+      - /usr/share/opensearch-dashboards/setup/setup-dashboards.js
+    volumes:
+      - ${OPENSEARCH_DASHBOARDS_SETUP_SCRIPT:-./opensearch-dashboards/setup-dashboards.js}:/usr/share/opensearch-dashboards/setup/setup-dashboards.js:ro,Z
+    depends_on:
+      opensearch-dashboards:
+        condition: service_started
+    networks:
+      - otel-opensearch-net
+
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE:-docker.io/otel/opentelemetry-collector-contrib:0.155.0}
+    container_name: otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ${OTEL_COLLECTOR_CONFIG_FILE:-./otel-collector-config-opensearch.yaml}:/etc/otel/config.yaml:ro,Z
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - otel-opensearch-net
+
+networks:
+  otel-opensearch-net:
+    name: otel-opensearch-net

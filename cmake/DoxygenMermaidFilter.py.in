@@ -1,0 +1,31 @@
+#!@Python3_EXECUTABLE@
+
+"""Convert Mermaid fenced blocks into HTML that Doxygen preserves."""
+
+import html
+from pathlib import Path
+import re
+import sys
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(f"usage: {Path(sys.argv[0]).name} INPUT", file=sys.stderr)
+        return 2
+
+    source = Path(sys.argv[1]).read_text(encoding="utf-8")
+    mermaid_block = re.compile(
+        r"^```mermaid[ \t]*\r?\n(.*?)^```[ \t]*$",
+        re.DOTALL | re.MULTILINE,
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        diagram = html.escape(match.group(1).rstrip(), quote=False)
+        return f'@htmlonly\n<pre class="mermaid">\n{diagram}\n</pre>\n@endhtmlonly'
+
+    sys.stdout.write(mermaid_block.sub(replace, source))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -30,13 +30,16 @@ add_executable(${EXEC}
 )
 
 target_include_directories(${EXEC} PUBLIC
+  ${CMAKE_SOURCE_DIR};
+  ${CMAKE_BINARY_DIR};
+)
+
+target_include_directories(${EXEC} SYSTEM PUBLIC
   ${Boost_INCLUDE_DIRS};
   ${FairLogger_INCDIR};
   ${FairMQ_INCDIR};
   ${HIREDIS_HEADER};
   ${REDIS_PLUS_PLUS_HEADER};
-  ${CMAKE_SOURCE_DIR};
-  ${CMAKE_BINARY_DIR};
 )
 
 target_link_directories(${EXEC} PUBLIC
@@ -48,23 +51,27 @@ target_link_directories(${EXEC} PUBLIC
 if (FairMQ_VERSION VERSION_GREATER_EQUAL 1.8.0)
   target_link_libraries(${EXEC} PUBLIC
     ${Boost_LIBRARIES};
+    nestdaq_telemetry;
     fairmq;
     FairLogger;
     ${fmt_LIB};
     ${HIREDIS_LIB};
     ${REDIS_PLUS_PLUS_LIB};
     ${CMAKE_THREAD_LIBS_INIT};
+    ${CMAKE_DL_LIBS};
   )
 elseif ((FairMQ_VERSION VERSION_GREATER_EQUAL 1.4.55)
     AND (FairMQ_VERSION VERSION_LESS_EQUAL 1.4.56))
   target_link_libraries(${EXEC} PUBLIC
     ${Boost_LIBRARIES};
+    nestdaq_telemetry;
     FairMQStateMachine;
     FairLogger;
     ${fmt_LIB};
     ${HIREDIS_LIB};
     ${REDIS_PLUS_PLUS_LIB};
     ${CMAKE_THREAD_LIBS_INIT};
+    ${CMAKE_DL_LIBS};
   )
 else()
   message(FATAL_ERROR "Unsupported FairMQ version ${FairMQ_VERSION}")

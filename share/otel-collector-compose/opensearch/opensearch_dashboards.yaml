@@ -1,0 +1,11 @@
+server.host: "0.0.0.0"
+opensearch.hosts: ["http://opensearch:9200"]
+
+# Set the value to true to enable multiple data source feature
+data_source.enabled: true
+
+# Set the value to true to enable workspace feature
+workspace.enabled: true
+
+# Set the value to true to enable explore feature
+explore.enabled: true

@@ -33,7 +33,15 @@
 
 
 build/
-build*/
+build-*/
+build_*/
 CMakeFiles/
 cmake_install.cmake
 compile_commands.json
+
+worktree/
+worktree-*/
+worktree_*/
+worktrees/
+worktrees-*/
+worktrees_*/
